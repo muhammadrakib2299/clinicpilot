@@ -83,7 +83,24 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - Interview soundbite (1 sentence):
 ```
 
+> **Convention:** this log is updated at the end of **every** work session — what was built, what broke, and what was decided.
+
 ### Running log
+
+#### 2026-07-03 — Phase 0: monorepo foundation, dashboard shell & repo published
+- Phase: 0
+- Context: Scaffolded the whole project and shipped the Fleet Overview UI, then published to GitHub.
+- What was built:
+  - pnpm + Turborepo monorepo: `apps/web` (Vite+React18+TS+Tailwind v4), `apps/api` (NestJS skeleton + `/api/health`), `apps/ai` (FastAPI skeleton + `/health`), `packages/shared-types` (zod), `packages/fhir-client` (FHIR R4 + EHR adapter interface).
+  - `infra/docker-compose.yml`: Postgres+pgvector, Redis, n8n; pgvector init SQL.
+  - Web: "Clinical Futurism" **no-gradient** design tokens (dark default + light theme), Fleet Overview (KPI tiles, agent cards, SaaS plan-usage quota widget, live activity) and the streaming **Trace Viewer** drawer.
+  - Docs: added `11-SAAS-PRODUCTIZATION.md`, no-gradient design system in `04-UI-UX.md`, ADR-001.
+- Problems / what surprised me:
+  - **pnpm 10 blocks post-install scripts by default** → Vite's `esbuild` binary didn't install and the build would fail. Fix: `"pnpm": { "onlyBuiltDependencies": ["esbuild"] }` in root `package.json`, then reinstall.
+  - **GitHub contributions require the commit author email to match a verified email on the GitHub account.** My first commit used a placeholder email and would NOT have counted. Fix: rebuilt history authored as `muhammad.rakib2299@gmail.com`.
+- What worked: web builds clean (`tsc -b` + `vite build`, 0 errors, ~53 KB gzip JS); dev server returns HTTP 200 at :5173. History split into **16 logical commits** and pushed to `main`.
+- What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
+- Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
 #### 2026-__-__ — (example) FHIR appointment writes were harder than reads
 - Phase: 1
@@ -119,8 +136,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 
 | Date | Original decision | Changed to | Why |
 |------|-------------------|-----------|-----|
-| | | | |
-| | | | |
+| 2026-07-03 | Multi-tenant app | **Full SaaS product** (plans, Stripe billing, quotas, metering, entitlements) | Wanted it more scalable/sellable; architecture was already multi-tenant so the commercial layer was low-cost to add and is a strong hiring signal |
+| 2026-07-03 | Teal accent + generic dark/light theme | **"Clinical Futurism"** no-gradient system, dark default | Requirement: no gradients. Flat layered surfaces + hairline borders read as more precise/futuristic for a control-plane |
 
 ---
 
