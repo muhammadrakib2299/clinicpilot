@@ -1,0 +1,62 @@
+# ClinicPilot — local development stack
+# Stateful infra runs in Docker; app services (web/api/ai) run via pnpm/uvicorn in dev
+# for fast reload. Production Dockerfiles for web/api/ai are added in Phase 5.
+name: clinicpilot
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: clinicpilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clinicpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinicpilot}
+      POSTGRES_DB: ${POSTGRES_DB:-clinicpilot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clinicpilot} -d ${POSTGRES_DB:-clinicpilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: clinicpilot-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: clinicpilot-n8n
+    restart: unless-stopped
+    environment:
+      N8N_PORT: 5678
+      N8N_HOST: localhost
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: UTC
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_RUNNERS_ENABLED: "true"
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8ndata:/home/node/.n8n
+      - ../workflows:/workflows:ro
+
+volumes:
+  pgdata:
+  redisdata:
+  n8ndata:
