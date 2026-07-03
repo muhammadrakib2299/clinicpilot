@@ -1,0 +1,137 @@
+# 09 · TODO (Execution Checklist)
+
+Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.md`](./08-PLAN.md). Keep MVP (🟢) items strictly ahead of stretch (🔵) items. Tag commits `phase-N`.
+
+---
+
+## Phase 0 — Foundations
+- [ ] Create GitHub repo `clinicpilot` (MIT license, README stub)
+- [ ] Init pnpm workspace + Turborepo (`turbo.json`, `pnpm-workspace.yaml`)
+- [ ] Scaffold `apps/web` (Vite + React 18 + TS + Tailwind + shadcn/ui)
+- [ ] Scaffold `apps/api` (NestJS + TS)
+- [ ] Scaffold `apps/ai` (FastAPI + Python, `uv`/`poetry`)
+- [ ] Create `packages/shared-types`, `packages/fhir-client`, `packages/config`
+- [ ] Write `infra/docker-compose.yml`: postgres+pgvector, redis, n8n, api, ai, web
+- [ ] `.env.example` with `ANTHROPIC_API_KEY`, DB/Redis/n8n secrets
+- [ ] Add `/health` endpoints to api + ai; verify all containers reachable
+- [ ] GitHub Actions: install → lint → typecheck → test
+- [ ] Write ADR-001 (Vite split) and ADR-002 (polyglot backend)
+- [ ] ✅ Gate: `docker compose up` runs the full stack
+
+## Phase 1 — Vertical Slice: Scheduling Agent ⭐
+### Auth & data
+- [ ] DB migrations: `tenants`, `users`, `agents`, `tasks`, `traces`, `llm_usage`
+- [ ] Seed one tenant + admin user
+- [ ] Login flow (JWT/session) + protected routes
+### FHIR
+- [ ] Build `packages/fhir-client` typed R4 client (HAPI base URL)
+- [ ] Read `Patient`, `Appointment`, `Slot`; write `Appointment`
+- [ ] Seed synthetic patients/appointments on HAPI (or self-hosted HAPI JPA)
+### AI service
+- [ ] Provider interface (`llm/`) with Anthropic implementation
+- [ ] Tool definitions: `find_availability`, `reschedule_appointment`
+- [ ] Claude tool-use loop (reason → tool → observe → act)
+- [ ] Persist each step to `traces` with tokens + cost
+### Automation & queue
+- [ ] n8n "reschedule appointment" workflow (read slot → write appt → confirm)
+- [ ] Expose n8n webhook; call it from an AI-service tool
+- [ ] BullMQ producer (API) + worker (consumes → AI service)
+### UI
+- [ ] Fleet Overview with one agent card
+- [ ] Task Inbox + "simulate message" box
+- [ ] Trace Viewer streaming steps over WebSocket
+- [ ] Show cost per task
+- [ ] ✅ Gate (B1): reschedule works end-to-end, live, with trace + cost
+
+## Phase 2 — Multi-tenancy, RBAC & Audit
+- [ ] Add `tenant_id` to all tenant-scoped tables
+- [ ] Postgres RLS policies + tenant-context middleware (ADR-005)
+- [ ] Seed 2–3 synthetic clinics; tenant switcher in UI
+- [ ] Roles: Admin/Clinician/Coordinator/Viewer + `user_roles`
+- [ ] NestJS RBAC guards + policy decorators
+- [ ] RBAC-gated navigation in the SPA
+- [ ] Append-only `audit_log`; write on every action/tool call/data access
+- [ ] Audit Log UI: filter (actor/resource/action), export CSV
+- [ ] TLS locally; secrets via env/secret manager; document posture
+- [ ] Test: cross-tenant access is blocked by RLS
+- [ ] ✅ Gate: roles + tenants + audit all working
+
+## Phase 2.5 — SaaS Commercial Layer (see `11-SAAS-PRODUCTIZATION.md`)
+- [ ] Rename tenant → **org** model; self-serve signup → create org (Owner)
+- [ ] `plans` + `plan_features` (data-driven entitlements) seeded (Free/Pro/Clinic/Enterprise)
+- [ ] Central `entitlements.can(org, feature)` check used everywhere (no scattered `if plan===`)
+- [ ] Stripe (test mode): Products/Prices per plan; Checkout (upgrade) + Customer Portal
+- [ ] Stripe webhooks → sync `subscriptions`; idempotent `billing_events` log
+- [ ] Usage metering: Redis counters → reconcile to `usage_counters`; monthly reset job
+- [ ] Pre-flight **quota check** before enqueue (over quota → 402 + upsell, not crash)
+- [ ] Per-tenant LLM **budget cap** + rate limits at API gateway
+- [ ] Metered LLM overage → Stripe metered price
+- [ ] Billing & Plan UI: current plan, usage-vs-quota bars, upgrade/manage
+- [ ] Team & Invitations UI (invite by email, per-org role, pending invites)
+- [ ] ✅ Gate (SaaS MVP): signup → org → Free plan → hit quota → Stripe Checkout (test) → quota lifts, live
+
+## Phase 3 — Agents #2/#3 + Orchestration
+- [ ] Follow-up Agent: n8n scheduled sequence + templated check-ins
+- [ ] Document Q&A: doc ingest → chunk → embed → `embeddings` (pgvector)
+- [ ] RAG retrieval + answers **with citations**
+- [ ] Orchestrator: route task → correct agent (routing pattern)
+- [ ] Hand-off/escalation: confidence/scope check → `escalations` + queue UI
+- [ ] Reflection/self-check before high-stakes FHIR writes
+- [ ] Model fallback (Claude → OpenAI) behind provider interface (ADR-003)
+- [ ] PHI redaction/de-identification module before LLM calls
+- [ ] Test: escalation fires; fallback triggers on simulated failure
+- [ ] ✅ Gate: 3 agents deployable, routing + hand-off + fallback work
+
+## Phase 4 — Analytics, Observability & Polish
+- [ ] Analytics: tasks/day, success vs escalation per agent (Recharts)
+- [ ] Cost analytics: $/resolved task, per agent/tenant, spend charts
+- [ ] KPI tiles: no-show delta, calls deflected, follow-ups completed
+- [ ] OpenTelemetry tracing api→ai→n8n→fhir
+- [ ] Prometheus/Grafana: p50/p95 latency, queue depth, error/cost rate
+- [ ] Eval harness: datasets + scoring; commit a results report
+- [ ] FHIR Explorer: patient/appt browser + raw resource JSON viewer
+- [ ] Design-system pass; dark mode; `prefers-reduced-motion`
+- [ ] Accessibility audit (keyboard, contrast, ARIA live regions) → WCAG AA
+- [ ] ✅ Gate (B2/B5): MVP complete; metrics + cost visible; UI shipped-grade
+
+## Phase 5 — Deploy & Demo
+- [ ] Deploy web to Vercel
+- [ ] Deploy api/ai/n8n/postgres/redis to Fly.io/Render
+- [ ] Production seed script (synthetic tenants/agents/patients)
+- [ ] Seed `admin@demo` + `viewer@demo` accounts
+- [ ] Rate limits + demo-reset cron + LLM cost caps
+- [ ] Record 2-min Loom walkthrough (follow `01` demo flow)
+- [ ] Put live URL + video + demo creds in README
+- [ ] ✅ Gate (B3): public demo works from a clean browser
+
+## Phase 6 — Documentation, Tests & Hardening
+- [ ] Unit/integration tests → >70% on core services
+- [ ] Finalize ADR-001…006 in `/docs/adr`
+- [ ] Render architecture diagram (mermaid → PNG) into README
+- [ ] README polish: 30-second clarity, badges, verified quickstart
+- [ ] Dependency audit; secrets scan; RLS + PHI-redaction tests
+- [ ] `CONTRIBUTING.md` + `SECURITY.md` + disclaimers
+- [ ] ✅ Gate (B4): CI green; clone-and-run verified by a fresh clone
+
+## Phase 7 — Launch & Apply
+- [ ] Write case-study post ("How I built a multi-agent healthcare platform")
+- [ ] Cross-post to LinkedIn + dev.to; pin on GitHub profile
+- [ ] Update CV, LinkedIn, portfolio site (lead with ClinicPilot)
+- [ ] Prepare interview talk track (architecture, scaling, "what was hard")
+- [ ] Apply: 20 targeted roles + 10 contracts; track in a sheet
+- [ ] Log interview feedback → plan v1.1 (voice channel stretch)
+- [ ] ✅ Gate (C1–C5): interviews booked, offers/contracts in pipeline
+
+---
+
+## Stretch backlog (only after M5)
+- [ ] 🔵 Voice channel (Twilio) for Scheduling/Follow-up
+- [ ] 🔵 Agent versioning + rollback UI
+- [ ] 🔵 SSO/MFA (OIDC) real implementation
+- [ ] 🔵 Anomaly alerts (cost/error spikes)
+- [ ] 🔵 Tenant usage metering + billing view
+- [ ] 🔵 Workflow run history unified in-app
+- [ ] 🔵 Configurable orchestration modes (sequential/parallel)
+- [ ] 🔵 Self-hosted HAPI FHIR JPA option for offline demos
+- [ ] 🔵 Exportable PDF reports
+- [ ] 🔵 Schema-per-tenant isolation upgrade path (demo one tenant)
