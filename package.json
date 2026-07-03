@@ -1,0 +1,28 @@
+{
+  "name": "clinicpilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tenant SaaS control plane to deploy, orchestrate, and monitor a fleet of healthcare AI agents.",
+  "license": "MIT",
+  "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "web": "pnpm --filter @clinicpilot/web dev",
+    "api": "pnpm --filter @clinicpilot/api start:dev",
+    "up": "docker compose -f infra/docker-compose.yml up -d",
+    "down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}
