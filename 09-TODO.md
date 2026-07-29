@@ -84,15 +84,24 @@ real FHIR server today; what remains is the plumbing around it.
       matters**: a created task sits `queued` until a run is triggered by hand
 - [ ] Gateway FHIR endpoints so the AI service stops calling HAPI directly (ADR-008)
 ### UI
-- [x] Fleet Overview with agent cards
+- [x] Fleet Overview with agent cards — **live**, from `GET /api/agents`
 - [x] "Simulate message" box — creates a real task
 - [x] Trace Viewer streaming steps over WebSocket (+ HTTP backfill so a drawer
       opened mid-run does not start mid-thought)
 - [x] Show cost per task, per step
-- [ ] Task Inbox list view (endpoint exists; no screen yet)
-- [ ] Replace fixture KPI tiles / agent stats / activity feed with real queries
+- [x] Task Inbox list view — real table, click a row to replay its trace
+- [x] Router (react-router) — nine routes; the eight unbuilt screens render an
+      honest "not built yet, Phase N" page instead of a dead nav button
+- [x] Replace fixture KPI tiles / agent stats / activity feed with real queries
+      (`GET /api/overview`). Tiles now report what the system *measures* —
+      tasks, outcomes, spend, tokens — not the invented business outcomes
+      ("no-show −4pp", "76% calls deflected") the mock displayed
 - [x] ✅ Gate (B1): reschedule works end-to-end, live, with trace + cost —
       **met 2026-07-29**, 3 iterations, 9 steps, $0.0153, appointment moved on HAPI
+
+### Still fixture in the UI
+- [ ] Org switcher, search box (⌘K), notifications bell — chrome with no backing
+- [ ] Sidebar persona "Priya Nair" — labelled `Admin · demo`; real once auth lands
 
 ## Phase 2 — Multi-tenancy, RBAC & Audit
 - [ ] Add `tenant_id` to all tenant-scoped tables

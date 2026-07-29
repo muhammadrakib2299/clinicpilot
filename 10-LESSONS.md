@@ -170,6 +170,48 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-07-29 — I asked myself to click every page, and found eight dead buttons
+- Phase: 1
+- Context: Asked to walk the whole portal. I had shipped a dashboard that *looked*
+  finished and never actually clicked its own navigation.
+- **The finding.** No router was installed at all. The nine sidebar items were
+  plain `<button>` elements with no `onClick`; Dashboard was hardcoded
+  `active: true`. Clicking Agents, Tasks, Workflows, FHIR Explorer, Analytics,
+  Audit Log, Billing or Settings did *nothing* — no navigation, no error, no
+  console message. An audit of every `<button>` in the codebase: **5 wired, 6
+  dead.** The gap between "looks done" and "is done" was eight screens wide.
+- **The bigger finding was the numbers.** The KPI tiles read "128 appointments
+  booked, +12% vs last week", "no-show rate 11%, −4pp", "76% calls deflected".
+  Not one of those is something the product measures. They came from
+  `mock.ts` written during the design phase, and they had quietly become a
+  claim the system could not back.
+  - Replaced with metrics the system genuinely observes: tasks today, success
+    rate, cost per resolved task, tokens used. A freshly seeded install now
+    shows small honest numbers instead of impressive invented ones.
+  - **Inventing an outcome metric is worse than omitting it.** The business KPIs
+    return in Phase 4, when there is a baseline to compute a delta against.
+- **`null` is not `0`.** A paused agent with no runs shows `—`, not `0%`. "0%
+  success" is a specific and damning claim; "no data yet" is the truth. The API
+  returns `null` for every rate where the denominator is zero, and the UI
+  renders an em dash. Same for cost per task.
+- **A page saying "not built" beats a button that does nothing.** Each unbuilt
+  screen now renders what it will be, which phase it lands in, and what already
+  exists behind it. Identical information to a dead button — but the user learns
+  it in one click instead of concluding the app is broken. Buttons that cannot
+  work yet (Configure, Pause) are `disabled` with a title, not styled to look live.
+- **Right-sizing a dependency.** TanStack Query is on the stack list, but every
+  screen here loads once and refreshes on an explicit action — there is no cache
+  to invalidate. A ~30-line `useApi` hook covers it. react-router *was* worth its
+  cost: bundle went 54 → 70 KB gzipped for nine working routes.
+- What I'd do differently: click through my own UI before calling a phase done.
+  I described this dashboard as working in two separate summaries before
+  actually exercising its navigation.
+- Interview soundbite: *"I audited my own dashboard and found eight nav items
+  that did nothing and four KPI tiles showing numbers the product doesn't
+  measure. I replaced the invented business metrics with operational ones the
+  system actually observes, and made 'no data yet' render as an em dash rather
+  than 0% — because 0% success is a claim, and I didn't have the data to make it."*
+
 #### 2026-07-29 — The vertical slice closed: agent → FHIR → Postgres → live UI
 - Phase: 1
 - Context: End of the session that took Phase 1 from an empty schema to a working
@@ -337,6 +379,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-07-29 | Follow `09-TODO` order: migrations → auth → FHIR → agent | **Agent spine first, auth deferred** | Auth is weeks of work that produces nothing demoable. Skipping to the agent loop met Build Goal B1 in one session; a single hardcoded tenant behind `currentTenantId()` keeps Phase 2's RLS swap to one file |
 | 2026-07-29 | socket.io for the trace stream | **Native `ws` + browser WebSocket** | Rooms and reconnect come free with socket.io, but so does ~40 KB on a bundle whose selling point is being ~54 KB. The subscription map is twenty explicit lines; reconnect is logged as debt rather than paid for upfront |
 | 2026-07-29 | AI service calls FHIR directly | **Gateway owns FHIR access (ADR-008)** | Optimistic concurrency should exist once, PHI access must be auditable in one place, and the throwaway Python adapter had already written a malformed `Slot/Slot/…` reference the TypeScript client would not have |
+| 2026-07-29 | KPI tiles show business outcomes (no-show rate, calls deflected) | **Operational metrics only** — tasks, outcomes, spend, tokens | Those figures came from the design-phase mock and nothing in the product measures them. Small honest numbers beat impressive invented ones; the business KPIs return in Phase 4 when a baseline exists to compute a delta against |
+| 2026-07-29 | TanStack Query for data fetching (on the stack list since Phase 0) | **A ~30-line `useApi` hook** | ~13 KB for cache invalidation and refetch policies that no current screen needs — every page loads once and refreshes on an explicit action. Swap it in when a screen actually needs a cache |
 
 ---
 
