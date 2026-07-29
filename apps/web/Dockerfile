@@ -17,7 +17,11 @@ RUN pnpm install --frozen-lockfile --filter @clinicpilot/web...
 
 COPY packages packages
 COPY apps/web apps/web
-RUN pnpm --filter @clinicpilot/web build
+
+# `...` builds workspace dependencies first. The SPA does not import them yet,
+# but it will, and the failure mode is a confusing "cannot find module" during
+# an image build rather than anything obvious.
+RUN pnpm --filter "@clinicpilot/web..." build
 
 # ---- runtime --------------------------------------------------------------
 # Static SPA: nginx serves the bundle, no Node process in the running image.

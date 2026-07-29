@@ -16,7 +16,6 @@
     "test": "turbo run test",
     "web": "pnpm --filter @clinicpilot/web dev",
     "api": "pnpm --filter @clinicpilot/api start:dev",
-    "db:generate": "pnpm --filter @clinicpilot/api db:generate",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
     "db:seed": "turbo run db:seed",

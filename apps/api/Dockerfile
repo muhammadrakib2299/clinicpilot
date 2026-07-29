@@ -20,7 +20,14 @@ RUN pnpm install --frozen-lockfile --filter @clinicpilot/api...
 
 COPY packages packages
 COPY apps/api apps/api
-RUN pnpm --filter @clinicpilot/api build
+
+# The trailing `...` selects the API *and its workspace dependencies*, so
+# shared-types and fhir-client are compiled to their dist/ first. Without it the
+# API's own build fails with "Cannot find module '@clinicpilot/shared-types'" —
+# their package.json `main` points at dist/, which only exists after a build.
+# This passes locally either way, because local dist/ is already there from a
+# previous `pnpm build`; only a clean context catches it.
+RUN pnpm --filter "@clinicpilot/api..." build
 
 # ---- runtime --------------------------------------------------------------
 FROM node:20-alpine AS runtime
@@ -33,6 +40,11 @@ COPY --from=build /repo/node_modules /repo/node_modules
 COPY --from=build /repo/apps/api/node_modules ./node_modules
 COPY --from=build /repo/apps/api/dist ./dist
 COPY --from=build /repo/apps/api/package.json ./package.json
+
+# apps/api/node_modules/@clinicpilot/* are symlinks into /repo/packages. Ship
+# the real directories or every workspace import resolves to a dangling link
+# and the process dies on its first require.
+COPY --from=build /repo/packages /repo/packages
 
 USER node
 EXPOSE 8080
