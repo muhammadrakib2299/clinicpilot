@@ -4,19 +4,39 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
 
 ---
 
-## Phase 0 — Foundations
-- [ ] Create GitHub repo `clinicpilot` (MIT license, README stub)
-- [ ] Init pnpm workspace + Turborepo (`turbo.json`, `pnpm-workspace.yaml`)
-- [ ] Scaffold `apps/web` (Vite + React 18 + TS + Tailwind + shadcn/ui)
-- [ ] Scaffold `apps/api` (NestJS + TS)
-- [ ] Scaffold `apps/ai` (FastAPI + Python, `uv`/`poetry`)
-- [ ] Create `packages/shared-types`, `packages/fhir-client`, `packages/config`
-- [ ] Write `infra/docker-compose.yml`: postgres+pgvector, redis, n8n, api, ai, web
-- [ ] `.env.example` with `ANTHROPIC_API_KEY`, DB/Redis/n8n secrets
-- [ ] Add `/health` endpoints to api + ai; verify all containers reachable
-- [ ] GitHub Actions: install → lint → typecheck → test
-- [ ] Write ADR-001 (Vite split) and ADR-002 (polyglot backend)
-- [ ] ✅ Gate: `docker compose up` runs the full stack
+## Phase 0 — Foundations ✅ **COMPLETE** (closed out 2026-07-29)
+- [x] Create GitHub repo `clinicpilot` (MIT license, README stub)
+- [x] Init pnpm workspace + Turborepo (`turbo.json`, `pnpm-workspace.yaml`)
+- [x] Scaffold `apps/web` (Vite + React 18 + TS + Tailwind v4) — ⚠️ hand-rolled
+      primitives instead of shadcn/ui; revisit when the component surface grows
+- [x] Scaffold `apps/api` (NestJS + TS)
+- [x] Scaffold `apps/ai` (FastAPI + Python) — ⚠️ pip + `requirements*.txt`, not
+      `uv`/`poetry`; no lockfile yet, so CI resolves fresh each run
+- [x] Create `packages/shared-types`, `packages/fhir-client`, `packages/config`
+- [x] Write `infra/docker-compose.yml`: postgres+pgvector, redis, n8n, api, ai, web
+- [x] `.env.example` with `ANTHROPIC_API_KEY`, DB/Redis/n8n secrets + host port overrides
+- [x] Add `/health` endpoints to api + ai; verify all containers reachable
+- [x] GitHub Actions: install → lint → typecheck → test (+ build; Python job for ruff/pytest)
+- [x] Write ADR-001 (Vite split) and ADR-002 (polyglot backend)
+- [x] ✅ Gate: `docker compose up` runs the full stack — postgres, redis, api, ai
+      and web verified healthy; `/api/health` and `/health` return 200 from the host
+
+### Phase 0 close-out (not in the original list, needed to make the gate real)
+- [x] Regenerate the lockfile across all workspaces (`pnpm build` was failing at root)
+- [x] Dockerfiles for web (nginx), api (multi-stage pnpm) and ai (python-slim)
+- [x] Healthchecks + health-gated `depends_on` so `up --wait` means "actually ready"
+- [x] Overridable host ports so a clone-and-run survives a busy machine
+- [x] Test harnesses: Vitest (web, packages), Jest+Supertest (api), pytest (ai)
+- [x] **37 tests** — 30 TypeScript across 4 workspaces, 7 Python
+- [x] Shared ESLint flat config + TS base in `packages/config`; ruff for Python
+- [x] Harden AI-service CORS from `*` to a `WEB_ORIGIN` allowlist, matching the gateway
+- [x] Tag `phase-0`
+
+### Known debt carried into Phase 1
+- [ ] Pin Python deps with a lockfile (`uv` or pip-tools) — currently unpinned
+- [ ] Generate the AI-service client from its OpenAPI schema (ADR-002 drift risk)
+- [ ] `packages/*` are source-only (`main` → `src/index.ts`); needs a real build
+      step once `apps/api` imports them across the CommonJS boundary
 
 ## Phase 1 — Vertical Slice: Scheduling Agent ⭐
 ### Auth & data

@@ -2,7 +2,8 @@
 
 > **One-line pitch:** ClinicPilot is a multi-tenant SaaS control plane that lets healthcare clinics deploy, orchestrate, and monitor a fleet of AI agents (scheduling, patient follow-up, document Q&A) built on n8n workflows and the Claude API — with FHIR/EHR integration, role-based access, and a HIPAA-minded audit trail baked in.
 
-![status](https://img.shields.io/badge/status-portfolio_build-blue)
+[![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
+![status](https://img.shields.io/badge/status-Phase_0_complete-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -67,28 +68,56 @@ The three flagship agents:
 
 ---
 
-## Quickstart (outline)
+## Quickstart
+
+Requires Node 20+, pnpm 10, Python 3.11+ and Docker.
 
 ```bash
-# 1. Clone
-git clone https://github.com/<you>/clinicpilot.git && cd clinicpilot
-
-# 2. Environment
-cp .env.example .env         # add ANTHROPIC_API_KEY, DB creds, n8n secrets
-
-# 3. Bring up the stack (Postgres, Redis, n8n, API, web)
-docker compose up -d
-
-# 4. Migrate + seed synthetic tenants/agents
-pnpm db:migrate && pnpm db:seed
-
-# 5. Open
-#   Web dashboard   -> http://localhost:5173
-#   API (FastAPI)   -> http://localhost:8000/docs
-#   n8n editor      -> http://localhost:5678
+git clone https://github.com/muhammadrakib2299/clinicpilot.git && cd clinicpilot
+cp .env.example .env          # ANTHROPIC_API_KEY is not needed until Phase 1
+pnpm install
 ```
 
-Full setup lives in [`08-PLAN.md`](./08-PLAN.md) and the repo's root `CONTRIBUTING.md` (created during the build).
+**Everything in containers** — builds the three app images and blocks until every
+healthcheck passes:
+
+```bash
+pnpm up:all
+```
+
+**Or infra in Docker with the apps on the host**, which is the day-to-day loop
+because you keep hot reload:
+
+```bash
+pnpm up            # Postgres+pgvector, Redis, n8n
+pnpm web           # Vite dev server
+pnpm api           # NestJS in watch mode
+
+cd apps/ai && python -m venv .venv
+.venv/Scripts/activate         # Windows — *nix: source .venv/bin/activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+| Service | Containerised | Host dev |
+|---------|---------------|----------|
+| Web dashboard | http://localhost:8081 | http://localhost:5173 |
+| API gateway (NestJS) | http://localhost:8080/api/health | same |
+| AI service (FastAPI) | http://localhost:8000/health · [`/docs`](http://localhost:8000/docs) | same |
+| n8n editor | http://localhost:5678 | same |
+| Postgres · Redis | 5432 · 6379 | — |
+
+Every host port above is overridable (`WEB_PORT`, `REDIS_PORT`, …) if it is
+already taken on your machine — see [`.env.example`](./.env.example).
+
+### Verify
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 30 tests, 4 workspaces
+cd apps/ai && pytest && ruff check .                     # 7 tests
+```
+
+`pnpm db:migrate` / `db:seed` arrive with the schema in Phase 1.
 
 ---
 
@@ -108,6 +137,19 @@ Full setup lives in [`08-PLAN.md`](./08-PLAN.md) and the repo's root `CONTRIBUTI
 | 09 | [`09-TODO.md`](./09-TODO.md) | Granular execution checklist |
 | 10 | [`10-LESSONS.md`](./10-LESSONS.md) | Skills to learn + lessons-learned log |
 | 11 | [`11-SAAS-PRODUCTIZATION.md`](./11-SAAS-PRODUCTIZATION.md) | Commercial SaaS layer: plans, billing, quotas, metering, scale |
+| — | [`docs/adr/`](./docs/adr/) | Architecture Decision Records (001–002 accepted) |
+
+---
+
+## Project status
+
+**Phase 0 — Foundations: complete.** `docker compose up` brings Postgres+pgvector,
+Redis, n8n, the API gateway, the AI service and the SPA online health-gated; CI
+runs lint, typecheck, test and build across both toolchains on every push.
+
+**Phase 1 — Scheduling agent vertical slice: next.** No database schema, auth or
+Claude integration exists yet; the dashboard renders fixture data. See
+[`09-TODO.md`](./09-TODO.md) for the live checklist.
 
 ---
 

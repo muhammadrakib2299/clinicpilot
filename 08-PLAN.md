@@ -141,7 +141,7 @@
 
 | Milestone | Week | Gate |
 |-----------|------|------|
-| M0 Stack online | 1 | `docker compose up` works |
+| ✅ M0 Stack online | 1 | `docker compose up` works — **met 2026-07-29** |
 | **M1 Vertical slice** ⭐ | 4 | Scheduling agent end-to-end, live trace |
 | M2 Multi-tenant + governed | 6 | RLS + RBAC + audit |
 | M3 Full fleet + orchestration | 8 | 3 agents, routing, hand-off, fallback |
