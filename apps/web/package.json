@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -17,12 +18,19 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@clinicpilot/config": "workspace:*",
     "@tailwindcss/vite": "^4.1.13",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.18.0",
+    "jsdom": "^26.0.0",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.7.3",
-    "vite": "^6.0.11"
+    "vite": "^6.0.11",
+    "vitest": "^3.0.5"
   }
 }
