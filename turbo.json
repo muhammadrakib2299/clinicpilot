@@ -16,6 +16,17 @@
     },
     "test": {
       "dependsOn": ["^build"]
+    },
+    "db:migrate": {
+      "cache": false
+    },
+    "db:seed": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
+    "fhir:seed": {
+      "dependsOn": ["^build"],
+      "cache": false
     }
   }
 }

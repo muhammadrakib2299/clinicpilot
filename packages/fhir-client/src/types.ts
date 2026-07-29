@@ -39,6 +39,20 @@ export interface CodeableConcept {
   text?: string;
 }
 
+/**
+ * A business identifier that survives server-assigned ids changing.
+ *
+ * This is how seeded fixtures stay idempotent: search by
+ * `identifier=<system>|<value>` and reuse the hit instead of creating a
+ * duplicate, which matters because the public sandbox is periodically wiped
+ * and re-seeded from scratch.
+ */
+export interface Identifier {
+  system?: string;
+  value?: string;
+  use?: string;
+}
+
 export interface HumanName {
   use?: string;
   family?: string;
@@ -63,6 +77,7 @@ export interface Bundle<T extends FhirResource = FhirResource> {
 
 export interface Patient extends FhirResource {
   resourceType: "Patient";
+  identifier?: Identifier[];
   active?: boolean;
   name?: HumanName[];
   telecom?: ContactPoint[];
@@ -72,12 +87,14 @@ export interface Patient extends FhirResource {
 
 export interface Practitioner extends FhirResource {
   resourceType: "Practitioner";
+  identifier?: Identifier[];
   active?: boolean;
   name?: HumanName[];
 }
 
 export interface Schedule extends FhirResource {
   resourceType: "Schedule";
+  identifier?: Identifier[];
   active?: boolean;
   actor: Reference[];
   serviceType?: CodeableConcept[];
@@ -88,6 +105,7 @@ export type SlotStatus = "busy" | "free" | "busy-unavailable" | "busy-tentative"
 
 export interface Slot extends FhirResource {
   resourceType: "Slot";
+  identifier?: Identifier[];
   schedule: Reference;
   status: SlotStatus;
   /** ISO 8601 instant. */
@@ -117,6 +135,7 @@ export interface AppointmentParticipant {
 
 export interface Appointment extends FhirResource {
   resourceType: "Appointment";
+  identifier?: Identifier[];
   status: AppointmentStatus;
   start?: string;
   end?: string;

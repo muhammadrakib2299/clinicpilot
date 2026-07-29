@@ -110,6 +110,30 @@ export class FhirClient implements EhrAdapter {
 
   // ── Scheduling-agent helpers ──────────────────────────────────────────────
 
+  /**
+   * Look a resource up by business identifier rather than server id.
+   *
+   * The basis of idempotent seeding: server ids are assigned fresh every time
+   * the sandbox is wiped, but `system|value` is ours and stable, so a re-run
+   * finds what it created last time instead of duplicating it.
+   *
+   * Returns the first match. A well-formed identifier should be unique, but
+   * the spec does not enforce it and the sandbox is shared, so callers get
+   * "one of them" rather than a guarantee.
+   */
+  async findByIdentifier<T extends FhirResource>(
+    type: string,
+    system: string,
+    value: string,
+  ): Promise<T | undefined> {
+    const bundle = await this.searchResources<T>(type, {
+      identifier: `${system}|${value}`,
+      _count: "1",
+    });
+
+    return bundleResources(bundle)[0];
+  }
+
   /** Appointments for a patient, newest first, optionally filtered by status. */
   async findAppointments(params: {
     patientId: string;
