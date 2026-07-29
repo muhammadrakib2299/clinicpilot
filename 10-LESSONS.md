@@ -170,14 +170,42 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
-#### 2026-__-__ — (example) FHIR appointment writes were harder than reads
+#### 2026-07-29 — FHIR writes really were harder than reads (the prediction held)
 - Phase: 1
-- Context: Implementing `reschedule_appointment` against HAPI.
-- Problem: _(fill in — e.g., resource versioning / conditional update semantics)_
-- What I tried: _…_
-- What worked: _…_
-- What I'd do differently: _…_
-- Interview soundbite: _"I learned FHIR writes require careful version/conditional handling, so I added optimistic-concurrency handling in the client."_
+- Context: Building the typed FHIR R4 client the Scheduling Agent needs — read
+  appointments, find free slots, reschedule — against the public HAPI sandbox.
+- **Problems / what surprised me:**
+  - **The sandbox was empty.** `GET /Patient?_count=3` returned a valid
+    `searchset` bundle with zero entries. hapi.fhir.org is periodically wiped —
+    my own risk register flagged this and I still half-expected fixtures to be
+    sitting there. Consequence: the seed script must *create* everything the
+    demo touches, and no test may assume pre-existing sandbox data.
+  - **`If-Match` must use the weak-ETag form.** FHIR mandates `W/"4"`, not a
+    bare `4`; the bare form is rejected. Easy to get wrong because the version
+    itself is a plain string in `meta.versionId`.
+  - **Two status codes mean the same thing.** A concurrent edit surfaces as
+    409 *or* 412 depending on server and code path, so both have to map to the
+    same conflict type or half the collisions look like generic failures.
+  - **Search params need real URL encoding.** `start=ge2026-07-06T09:00:00+01:00`
+    with a raw `+` decodes server-side as a space, the lower bound is silently
+    ignored, and you get *every* slot back — a wrong answer that looks like a
+    working query. `URLSearchParams` handles it; hand-built query strings do not.
+- What worked: verified the whole concurrency path against the live server —
+  create returns `versionId=1`, an update carrying `If-Match: W/"1"` succeeds and
+  returns `versionId=2`, and replaying that same now-stale `If-Match` is refused
+  with **409**. That is the behaviour the agent depends on, proven end to end
+  rather than assumed.
+- **Design call:** `rescheduleAppointment` re-reads the appointment to get its
+  current version instead of trusting a version the caller is holding. The agent
+  may have spent several seconds reasoning between looking at the appointment and
+  deciding to move it, and that gap is exactly when someone else books the slot.
+- What I'd do differently: write the seed *before* the client next time. I built
+  read helpers against a server with nothing in it, so the first genuinely
+  end-to-end check came later than it should have.
+- Interview soundbite: *"FHIR writes need optimistic concurrency, so my client
+  re-reads the resource and sends its version as a weak ETag `If-Match` — I
+  verified against the live HAPI server that a stale version is rejected with a
+  409 rather than silently overwriting someone else's booking."*
 
 #### 2026-__-__ — 
 - Phase: 
