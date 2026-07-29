@@ -10,7 +10,8 @@ Responsibilities (built out in Phases 1–3, see ../../08-PLAN.md):
 
 For Phase 0 this exposes only a health check.
 """
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,5 +31,5 @@ def health() -> dict:
     return {
         "status": "ok",
         "service": "clinicpilot-ai",
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
     }

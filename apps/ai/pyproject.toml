@@ -17,3 +17,14 @@ dev = ["ruff>=0.8.0", "pytest>=8.3.0"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/F pycodestyle+pyflakes, I import order, UP pyupgrade,
+# B bugbear, SIM simplify, ASYNC async footguns (this service is async-heavy).
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
