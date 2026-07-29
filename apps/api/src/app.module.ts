@@ -1,14 +1,21 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+
+import { DbModule } from "./db/db.module";
 import { HealthController } from "./health/health.controller";
+import { TasksModule } from "./tasks/tasks.module";
 
 /**
- * Root module. Feature modules (auth, tenancy, rbac, agents, tasks,
- * orchestrator, workflows, analytics, audit, realtime, billing) are
- * wired in during Phases 1–2.5 per docs/08-PLAN.md.
+ * Root module. Remaining feature modules (auth, tenancy, rbac, orchestrator,
+ * workflows, analytics, audit, realtime, billing) are wired in during
+ * Phases 1–2.5 per 08-PLAN.md.
  */
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true })],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env"] }),
+    DbModule,
+    TasksModule,
+  ],
   controllers: [HealthController],
 })
 export class AppModule {}

@@ -1,17 +1,14 @@
 import { existsSync } from "node:fs";
 
+import { DEMO_TENANT_ID } from "../common/tenant";
 import { createDb, createPool, databaseUrl } from "./client";
 import { agents, tenants } from "./schema";
 
 const ROOT_ENV = "../../.env";
 if (existsSync(ROOT_ENV)) process.loadEnvFile(ROOT_ENV);
 
-/**
- * Fixed rather than generated so the seed is idempotent and so fixtures,
- * demo links and manual psql pokes all refer to the same tenant across
- * re-runs and across machines.
- */
-export const DEMO_TENANT_ID = "00000000-0000-4000-8000-000000000001";
+// Shared with the runtime tenant seam so fixtures and requests agree.
+export { DEMO_TENANT_ID } from "../common/tenant";
 
 const DEMO_TENANT = {
   id: DEMO_TENANT_ID,

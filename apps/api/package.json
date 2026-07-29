@@ -28,7 +28,8 @@
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@clinicpilot/config": "workspace:*",

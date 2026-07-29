@@ -12,10 +12,12 @@ Numbered in the order the decision was accepted, never renumbered.
 | 005 | Multi-tenancy via Postgres row-level security | Planned | 2 |
 | 006 | PHI redaction boundary before any model call | Planned | 3 |
 | 007 | Queue and worker topology (BullMQ) | Planned | 1 |
+| [008](./ADR-008-fhir-access-through-the-gateway.md) | FHIR access goes through the gateway | Accepted | 1 |
 
-003 and 005 are numbered to match the references already in `08-PLAN.md`,
-`09-TODO.md` and `06-ARCHITECTURE-SCALABILITY.md`; 004 was the next free slot
-when the data-access decision was accepted.
+003, 005, 006 and 007 are reserved to match references already in `08-PLAN.md`,
+`09-TODO.md` and `06-ARCHITECTURE-SCALABILITY.md`. Accepted decisions take the
+next free number, so 004 and 008 are out of phase order — numbers record
+acceptance order, not planning order.
 
 ## Format
 
