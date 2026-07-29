@@ -23,6 +23,11 @@ class TraceStep:
     tokens_out: int | None = None
     cost_usd: float | None = None
     latency_ms: int | None = None
+    # Present only on steps that made a model call, so the gateway can write
+    # a matching llm_usage row and spend reconciles against the trace.
+    model: str | None = None
+    cache_read_tokens: int | None = None
+    cache_write_tokens: int | None = None
 
     def to_payload(self) -> dict[str, Any]:
         """Wire shape the gateway persists and broadcasts (ADR-004)."""
@@ -36,6 +41,9 @@ class TraceStep:
             "tokensOut": self.tokens_out,
             "costUsd": self.cost_usd,
             "latencyMs": self.latency_ms,
+            "model": self.model,
+            "cacheReadTokens": self.cache_read_tokens,
+            "cacheWriteTokens": self.cache_write_tokens,
         }
 
 

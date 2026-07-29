@@ -83,6 +83,9 @@ def run_agent(
             tokens_out=response.usage.output_tokens,
             cost_usd=step_cost,
             latency_ms=response.latency_ms,
+            model=response.model,
+            cache_read_tokens=response.usage.cache_read_input_tokens,
+            cache_write_tokens=response.usage.cache_creation_input_tokens,
         )
 
         if not response.wants_tools:

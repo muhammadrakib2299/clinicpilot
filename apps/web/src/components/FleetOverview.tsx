@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Settings2, Pause, TrendingUp } from "lucide-react";
 import { AGENTS, KPIS, ACTIVITY, type TraceKind } from "@/data/mock";
 import { Card, Sparkline, StatusPill, Meter } from "@/components/primitives";
+import { TaskComposer } from "@/components/TaskComposer";
 import { TRACE_COLORS } from "@/lib/trace";
 import { cn } from "@/lib/cn";
 
@@ -81,7 +82,13 @@ function ActivityDot({ kind }: { kind: TraceKind }) {
   return <span className="mt-1.5 size-1.5 shrink-0 rounded-full" style={{ backgroundColor: TRACE_COLORS[kind] }} />;
 }
 
-export function FleetOverview({ onOpenTrace }: { onOpenTrace: () => void }) {
+export function FleetOverview({
+  onOpenTrace,
+  onTaskCreated,
+}: {
+  onOpenTrace: () => void;
+  onTaskCreated: (taskId: string) => void;
+}) {
   return (
     <div className="mx-auto max-w-[1440px] space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -111,6 +118,8 @@ export function FleetOverview({ onOpenTrace }: { onOpenTrace: () => void }) {
         </div>
 
         <div className="space-y-4">
+          <TaskComposer onTaskCreated={onTaskCreated} />
+
           {/* SaaS quota widget — usage vs plan limit */}
           <Card className="p-4">
             <div className="flex items-center justify-between">

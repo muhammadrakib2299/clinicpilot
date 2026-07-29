@@ -1,4 +1,5 @@
 import { type INestApplication } from "@nestjs/common";
+import { WsAdapter } from "@nestjs/platform-ws";
 import { Test, type TestingModule } from "@nestjs/testing";
 import request from "supertest";
 
@@ -20,6 +21,10 @@ describe("Health (e2e)", () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    // Must mirror main.ts. Without it Nest looks for the default socket.io
+    // driver, cannot find it, and calls process.exit(1) during init — which
+    // reads as a mysterious test-suite crash rather than a missing adapter.
+    app.useWebSocketAdapter(new WsAdapter(app));
     app.setGlobalPrefix("api");
     await app.init();
   });

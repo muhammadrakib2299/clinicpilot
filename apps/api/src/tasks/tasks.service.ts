@@ -5,10 +5,14 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { currentTenantId } from "../common/tenant";
 import { DbService } from "../db/db.service";
 import { agents, llmUsage, tasks, traces } from "../db/schema";
+import { RealtimeService } from "../realtime/realtime.service";
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly dbService: DbService) {}
+  constructor(
+    private readonly dbService: DbService,
+    private readonly realtime: RealtimeService,
+  ) {}
 
   private get db() {
     return this.dbService.db;
@@ -99,6 +103,13 @@ export class TasksService {
       .where(eq(tasks.id, id))
       .returning();
 
+    this.realtime.publish({
+      type: "task:status",
+      taskId: id,
+      status: updated!.status,
+      outcome: updated!.outcome,
+    });
+
     return updated!;
   }
 
@@ -115,7 +126,11 @@ export class TasksService {
     const task = await this.findOne(taskId);
 
     try {
-      return await this.insertTrace(task, taskId, step);
+      const saved = await this.insertTrace(task, taskId, step);
+      // Broadcast only after the write commits. Emitting first would show the
+      // Trace Viewer a step that a failed transaction then never persisted.
+      this.realtime.publish({ type: "trace:step", taskId, step: saved });
+      return saved;
     } catch (error) {
       // The unique (task_id, step_no) index caught a replay. That is the
       // caller sending the same step twice — a retry after a timeout, most

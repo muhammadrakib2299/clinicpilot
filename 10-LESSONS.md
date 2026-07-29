@@ -170,6 +170,56 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-07-29 — The vertical slice closed: agent → FHIR → Postgres → live UI
+- Phase: 1
+- Context: End of the session that took Phase 1 from an empty schema to a working
+  agent. B1's gate is met — type a message, the agent reschedules a real
+  appointment on the HAPI sandbox, and every step streams into the Trace Viewer
+  with its own token count and cost. 3 iterations, 9 steps, $0.0153.
+- **The most valuable bug was found by CI, not by me.** The API image build failed
+  with `Cannot find module '@clinicpilot/shared-types'`. It passed locally every
+  single time, because my machine had `dist/` left over from an earlier build —
+  only a clean context exposed it. `pnpm --filter <pkg> build` builds *only* that
+  package; the trailing `...` is what pulls in workspace dependencies.
+  - It was **two** bugs. Fixing the build alone would have produced a green image
+    that died on first require, because the runtime stage never copied
+    `/repo/packages` and every workspace symlink dangled. The compose smoke job I
+    added at Phase 0 close-out is the only reason either surfaced before deploy.
+- **Two 500s that should have been 4xx.** Both were mine mapping errors lazily:
+  - A replayed trace step returned 500. Drizzle 0.45 wraps driver errors, so
+    Postgres' `23505` sits on `.cause` — a top-level `code` check misses *every*
+    constraint violation. Now walks the cause chain and returns **409**, so a
+    retrying client learns it already sent that step instead of hammering a
+    request that can never succeed.
+  - Lesson: when an ORM wraps errors, verify against the real database. My unit
+    test would have passed with the naive check because I wrote the fixture to
+    match my assumption, not the driver.
+- **A lint rule that would have shipped a runtime crash.** `consistent-type-imports`
+  flagged three injected NestJS classes. Obeying it erases them from
+  `design:paramtypes`, so Nest cannot resolve the provider — a green build that
+  500s on the first request. Disabled for that workspace only, with the reason in
+  the config. Auto-fixable does not mean correct.
+- **Choosing native `ws` over socket.io.** Rooms and reconnect come free with
+  socket.io, but so does ~40 KB on a bundle whose whole pitch is being small. The
+  subscription map is about twenty explicit lines; the SPA stayed at ~54 KB
+  gzipped and uses the browser's built-in WebSocket. The trade I did *not* make
+  well: there is still no reconnect/backoff, which is logged as debt.
+- **The backfill-then-stream ordering matters.** A drawer opened mid-run would
+  otherwise start mid-thought, because steps already written are never broadcast
+  again. Subscribing *before* backfilling — not after — is what closes the gap
+  where a step written between the two would be lost. `stepNo` is the dedupe key,
+  and it is the same value the database's unique index enforces.
+- **A test caught a real robustness bug in the hook**, not just a typo: a
+  malformed backfill response crashed the drawer, because my `catch` covered
+  rejection but not a payload that resolved fine and was the wrong shape.
+- What I'd do differently: run the container build before assuming local green
+  means anything. "Works on my machine" had a precise cause here — leftover build
+  artefacts — and one clean-context build would have caught it in seconds.
+- Interview soundbite: *"My CI compose smoke test caught a packaging bug that
+  passed locally every time, because my machine had stale build output the clean
+  container didn't. It was actually two bugs — fixing the build alone would have
+  shipped an image that built green and died on first require."*
+
 #### 2026-07-29 — Tool descriptions are load-bearing, and I have the numbers
 - Phase: 1
 - Context: First live run of the Claude tool-use loop — real model, real HAPI,
@@ -283,23 +333,28 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-07-29 | AI service CORS `allow_origins=["*"]` | Explicit `WEB_ORIGIN` allowlist, comma-separated | A wildcard is the wrong default for a service whose Phase 1 job is forwarding patient context to a model — and browsers ignore `allow_credentials` alongside `*`, so it was not even buying convenience |
 | 2026-07-29 | Fixed host ports in docker-compose | `${VAR:-default}` on every host port | An unrelated project's Redis container held 6379 and the stack refused to start. Clone-and-run should not require the machine to be clean |
 | 2026-07-29 | `packages/*` would need a dist build step | Source-only (`main` → `src/index.ts`) for now | Nothing consumes them across a runtime boundary yet and Vite compiles workspace TS directly. Logged as debt in `09-TODO` for when `apps/api` (CommonJS) imports them |
+| 2026-07-29 | Source-only packages (above) | **CommonJS dist build with declarations** | Reversed within the day: the moment `apps/api` imported shared-types, Nest could not `require()` an ESM module. Tests passed only because specs are excluded from the build — the first *runtime* import would have crashed on startup |
+| 2026-07-29 | Follow `09-TODO` order: migrations → auth → FHIR → agent | **Agent spine first, auth deferred** | Auth is weeks of work that produces nothing demoable. Skipping to the agent loop met Build Goal B1 in one session; a single hardcoded tenant behind `currentTenantId()` keeps Phase 2's RLS swap to one file |
+| 2026-07-29 | socket.io for the trace stream | **Native `ws` + browser WebSocket** | Rooms and reconnect come free with socket.io, but so does ~40 KB on a bundle whose selling point is being ~54 KB. The subscription map is twenty explicit lines; reconnect is logged as debt rather than paid for upfront |
+| 2026-07-29 | AI service calls FHIR directly | **Gateway owns FHIR access (ADR-008)** | Optimistic concurrency should exist once, PHI access must be auditable in one place, and the throwaway Python adapter had already written a malformed `Slot/Slot/…` reference the TypeScript client would not have |
 
 ---
 
 ## Metrics to capture for the case study
 Fill these in by launch — concrete numbers make the portfolio post land.
 
-- [~] **Lines of code / services / test coverage %** — *as of Phase 0 close-out
-  (2026-07-29):* ~1,790 lines of application + infra code against 1,823 lines of
-  planning docs. 6 services (web, api, ai, postgres, redis, n8n) across 5
-  workspaces. **37 tests** (30 TypeScript, 7 Python); coverage % not yet measured
-  — wire `test:cov` thresholds in Phase 6.
-  - web 781 · packages 92 · api 58 · ai 47 · infra + CI 347
-  - test code 465 lines — *more test code than application code outside the SPA*
-- [ ] Avg cost per resolved task (Claude tokens → $)
-- [ ] p95 task latency (excl. LLM)
-- [ ] # of FHIR resource types integrated — *client written, 0 resources live*
-- [ ] # agents / workflows shipped — *0; the 3 agent cards render fixture data*
+- [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
+  postgres, redis, n8n) across 5 workspaces. **145 tests** (89 TypeScript,
+  56 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
+- [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
+  `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
+  $0.0215 before a tool-description fix removed a wasted round trip — **a 24%
+  reduction from one sentence of schema documentation.**
+- [ ] p95 task latency (excl. LLM) — *per-step latency is captured; not yet aggregated*
+- [~] **# of FHIR resource types integrated** — **5 live**: Patient, Practitioner,
+  Schedule, Slot, Appointment (read, write, and version-checked update)
+- [~] **# agents shipped** — **1 of 3 working** (Scheduling). Follow-up and
+  Document Q&A are seeded `paused`; 0 n8n workflows so far
 - [ ] Eval scores (agent correctness before/after prompt iterations)
 - [~] **Build time** — Phase 0 spanned 2026-07-03 → 2026-07-29 across 2 working
   sessions (26 elapsed days, ~1 day of actual work; the gap is the honest number

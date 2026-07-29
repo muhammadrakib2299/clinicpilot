@@ -5,12 +5,13 @@
  */
 
 export type AgentStatus = "active" | "degraded" | "paused";
+export type AgentKind = "scheduling" | "followup" | "docqa";
 export type TraceKind = "reason" | "tool_call" | "observation" | "action" | "escalation";
 
 export interface Agent {
   id: string;
   name: string;
-  kind: "scheduling" | "followup" | "docqa";
+  kind: AgentKind;
   status: AgentStatus;
   tasksToday: number;
   successRate: number; // 0..1

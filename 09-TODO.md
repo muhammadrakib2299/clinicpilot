@@ -36,33 +36,63 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
 ### Known debt carried into Phase 1
 - [ ] Pin Python deps with a lockfile (`uv` or pip-tools) — currently unpinned
 - [ ] Generate the AI-service client from its OpenAPI schema (ADR-002 drift risk)
-- [ ] `packages/*` are source-only (`main` → `src/index.ts`); needs a real build
-      step once `apps/api` imports them across the CommonJS boundary
+- [x] ~~`packages/*` are source-only~~ — resolved: both emit CommonJS with
+      declarations, because Nest cannot `require()` an ESM module and the first
+      runtime import would have crashed on startup
 
-## Phase 1 — Vertical Slice: Scheduling Agent ⭐
+### Debt added during Phase 1
+- [ ] `apps/ai/app/agents/demo.py` calls HAPI directly, contradicting ADR-008.
+      Confined to the demo entrypoint until the gateway FHIR endpoints exist
+- [ ] `RealtimeService` is an in-process rxjs Subject — becomes Redis pub/sub
+      when the gateway runs more than one replica (Phase 4)
+- [ ] `internal/` routes have no service token yet; they must not be publicly
+      reachable before deploy (Phase 2, alongside RBAC)
+- [ ] No reconnect/backoff on the Trace Viewer WebSocket — a dropped socket
+      shows `closed` until the drawer is reopened
+
+## Phase 1 — Vertical Slice: Scheduling Agent ⭐ **~70% — agent works end to end**
+
+Sequenced **agent-spine-first**: auth, queue and n8n were deliberately deferred so
+a demoable artefact existed sooner. The agent reschedules a real appointment on a
+real FHIR server today; what remains is the plumbing around it.
+
 ### Auth & data
-- [ ] DB migrations: `tenants`, `users`, `agents`, `tasks`, `traces`, `llm_usage`
-- [ ] Seed one tenant + admin user
-- [ ] Login flow (JWT/session) + protected routes
+- [x] DB migrations: `tenants`, `agents`, `tasks`, `traces`, `llm_usage`
+      (Drizzle, committed SQL — `users` lands with auth)
+- [x] Seed one tenant + the three-agent fleet (idempotent, fixed demo tenant id)
+- [ ] Login flow (JWT/session) + protected routes — **deferred**, single hardcoded
+      tenant behind `currentTenantId()` so Phase 2 swaps it in one place
 ### FHIR
-- [ ] Build `packages/fhir-client` typed R4 client (HAPI base URL)
-- [ ] Read `Patient`, `Appointment`, `Slot`; write `Appointment`
-- [ ] Seed synthetic patients/appointments on HAPI (or self-hosted HAPI JPA)
+- [x] Build `packages/fhir-client` typed R4 client (HAPI base URL)
+- [x] Read `Patient`, `Appointment`, `Slot`; write `Appointment`
+- [x] **Optimistic concurrency** — re-read + weak-ETag `If-Match`, 409/412 mapped
+      to a conflict error (not in the original list; FHIR writes demanded it)
+- [x] Seed synthetic patients/appointments on HAPI — refreshes rather than skips,
+      because slot times are relative to today and the sandbox gets wiped
 ### AI service
-- [ ] Provider interface (`llm/`) with Anthropic implementation
-- [ ] Tool definitions: `find_availability`, `reschedule_appointment`
-- [ ] Claude tool-use loop (reason → tool → observe → act)
-- [ ] Persist each step to `traces` with tokens + cost
+- [x] Provider interface (`llm/`) with Anthropic implementation
+- [x] Tool definitions: `find_appointments`, `find_availability`, `reschedule_appointment`
+- [x] Claude tool-use loop (reason → tool → observe → act) + escalation on
+      non-convergence; a failing tool returns an error result the model recovers from
+- [x] Persist each step to `traces` with tokens + cost
+- [x] **Cost accounting module** — cache-aware, date-bounded rate card, unknown
+      model raises rather than pricing at zero
 ### Automation & queue
 - [ ] n8n "reschedule appointment" workflow (read slot → write appt → confirm)
 - [ ] Expose n8n webhook; call it from an AI-service tool
-- [ ] BullMQ producer (API) + worker (consumes → AI service)
+- [ ] BullMQ producer (API) + worker (consumes → AI service) — **the gap that
+      matters**: a created task sits `queued` until a run is triggered by hand
+- [ ] Gateway FHIR endpoints so the AI service stops calling HAPI directly (ADR-008)
 ### UI
-- [ ] Fleet Overview with one agent card
-- [ ] Task Inbox + "simulate message" box
-- [ ] Trace Viewer streaming steps over WebSocket
-- [ ] Show cost per task
-- [ ] ✅ Gate (B1): reschedule works end-to-end, live, with trace + cost
+- [x] Fleet Overview with agent cards
+- [x] "Simulate message" box — creates a real task
+- [x] Trace Viewer streaming steps over WebSocket (+ HTTP backfill so a drawer
+      opened mid-run does not start mid-thought)
+- [x] Show cost per task, per step
+- [ ] Task Inbox list view (endpoint exists; no screen yet)
+- [ ] Replace fixture KPI tiles / agent stats / activity feed with real queries
+- [x] ✅ Gate (B1): reschedule works end-to-end, live, with trace + cost —
+      **met 2026-07-29**, 3 iterations, 9 steps, $0.0153, appointment moved on HAPI
 
 ## Phase 2 — Multi-tenancy, RBAC & Audit
 - [ ] Add `tenant_id` to all tenant-scoped tables
