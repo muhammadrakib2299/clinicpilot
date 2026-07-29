@@ -1,8 +1,10 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
+import { AgentsModule } from "./agents/agents.module";
 import { DbModule } from "./db/db.module";
 import { HealthController } from "./health/health.controller";
+import { OverviewModule } from "./overview/overview.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { TasksModule } from "./tasks/tasks.module";
 
@@ -17,6 +19,8 @@ import { TasksModule } from "./tasks/tasks.module";
     DbModule,
     RealtimeModule,
     TasksModule,
+    AgentsModule,
+    OverviewModule,
   ],
   controllers: [HealthController],
 })

@@ -1,30 +1,32 @@
 import {
-  LayoutDashboard,
-  Bot,
-  Inbox,
-  Workflow,
-  Database,
-  BarChart3,
-  ScrollText,
-  CreditCard,
-  Settings,
   Activity,
+  BarChart3,
+  Bot,
+  CreditCard,
+  Database,
+  Inbox,
+  LayoutDashboard,
+  ScrollText,
+  Settings,
+  Workflow,
 } from "lucide-react";
+import { NavLink } from "react-router-dom";
+
 import { cn } from "@/lib/cn";
 
 const NAV = [
-  { icon: LayoutDashboard, label: "Dashboard", active: true },
-  { icon: Bot, label: "Agents" },
-  { icon: Inbox, label: "Tasks", badge: 3 },
-  { icon: Workflow, label: "Workflows" },
-  { icon: Database, label: "FHIR Explorer" },
-  { icon: BarChart3, label: "Analytics" },
-  { icon: ScrollText, label: "Audit Log" },
-  { icon: CreditCard, label: "Billing" },
-  { icon: Settings, label: "Settings" },
+  { icon: LayoutDashboard, label: "Dashboard", to: "/" },
+  { icon: Bot, label: "Agents", to: "/agents" },
+  { icon: Inbox, label: "Tasks", to: "/tasks" },
+  { icon: Workflow, label: "Workflows", to: "/workflows" },
+  { icon: Database, label: "FHIR Explorer", to: "/fhir" },
+  { icon: BarChart3, label: "Analytics", to: "/analytics" },
+  { icon: ScrollText, label: "Audit Log", to: "/audit" },
+  { icon: CreditCard, label: "Billing", to: "/billing" },
+  { icon: Settings, label: "Settings", to: "/settings" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ openTaskCount }: { openTaskCount?: number }) {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface-1">
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
@@ -36,23 +38,27 @@ export function Sidebar() {
 
       <nav className="flex-1 space-y-0.5 p-2">
         {NAV.map((item) => (
-          <button
+          <NavLink
             key={item.label}
-            className={cn(
-              "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-              item.active
-                ? "border border-border bg-surface-2 font-medium text-text"
-                : "border border-transparent text-muted hover:bg-surface-2 hover:text-text",
-            )}
+            to={item.to}
+            end={item.to === "/"}
+            className={({ isActive }) =>
+              cn(
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                isActive
+                  ? "border border-border bg-surface-2 font-medium text-text"
+                  : "border border-transparent text-muted hover:bg-surface-2 hover:text-text",
+              )
+            }
           >
             <item.icon className="size-4 shrink-0" strokeWidth={2} />
             <span className="flex-1 text-left">{item.label}</span>
-            {item.badge && (
+            {item.label === "Tasks" && openTaskCount ? (
               <span className="rounded-full border border-border bg-surface-1 px-1.5 text-xs tabular-nums text-muted">
-                {item.badge}
+                {openTaskCount}
               </span>
-            )}
-          </button>
+            ) : null}
+          </NavLink>
         ))}
       </nav>
 
@@ -63,7 +69,8 @@ export function Sidebar() {
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-medium">Priya Nair</div>
-            <div className="truncate text-[11px] text-muted">Admin</div>
+            {/* No auth yet — this is the seeded demo persona, not a session. */}
+            <div className="truncate text-[11px] text-muted">Admin · demo</div>
           </div>
         </div>
       </div>

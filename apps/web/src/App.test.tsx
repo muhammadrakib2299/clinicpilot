@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { AGENTS, ORG } from "@/data/mock";
 
 /** Minimal WebSocket stand-in — jsdom has none. */
 class FakeWebSocket {
@@ -58,6 +57,45 @@ const TASK = {
   resolvedAt: null,
 };
 
+const AGENTS_RESPONSE = [
+  {
+    id: "agent-1",
+    kind: "scheduling",
+    name: "Scheduling Agent",
+    status: "active",
+    tasksToday: 3,
+    totalTasks: 3,
+    successRate: 1,
+    escalationRate: 0,
+    costPerTask: 0.007,
+    totalCostUsd: 0.021,
+  },
+];
+
+const OVERVIEW_RESPONSE = {
+  kpis: {
+    tasksTotal: 3,
+    tasksToday: 3,
+    tasksOpen: 1,
+    resolved: 2,
+    escalated: 0,
+    failed: 0,
+    successRate: 1,
+    totalCostUsd: 0.021,
+    costPerResolvedTask: 0.0105,
+    modelCalls: 4,
+    tokensIn: 6945,
+    tokensOut: 710,
+  },
+  activity: [],
+};
+
+/** Every endpoint the dashboard hits on mount. */
+const BASE_HANDLERS = {
+  "/api/overview": OVERVIEW_RESPONSE,
+  "/api/agents": AGENTS_RESPONSE,
+};
+
 function step(overrides: Record<string, unknown> = {}) {
   return {
     id: "step-1",
@@ -78,7 +116,9 @@ function step(overrides: Record<string, unknown> = {}) {
 
 function mockFetch(handlers: Record<string, unknown>) {
   return vi.fn(async (url: string) => {
-    const match = Object.entries(handlers).find(([key]) => url.includes(key));
+    const match = Object.entries(handlers)
+      .sort(([a], [b]) => b.length - a.length)
+      .find(([key]) => url.includes(key));
     if (!match) throw new Error(`unstubbed fetch: ${url}`);
     return { ok: true, json: async () => match[1] } as Response;
   });
@@ -95,19 +135,17 @@ afterEach(() => {
 });
 
 describe("app shell", () => {
-  it("renders the org, the fleet heading and every agent card", () => {
-    vi.stubGlobal("fetch", mockFetch({}));
+  it("renders the fleet heading and agent cards from the API", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
     render(<App />);
 
-    expect(screen.getByText(ORG.name)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Fleet Overview" })).toBeInTheDocument();
-    for (const agent of AGENTS) {
-      expect(screen.getByText(agent.name)).toBeInTheDocument();
-    }
+    // Agent cards come from GET /api/agents now, not from the fixture module.
+    await waitFor(() => expect(screen.getByText("Scheduling Agent")).toBeInTheDocument());
   });
 
   it("defaults to the dark theme and toggles it on <html>", () => {
-    vi.stubGlobal("fetch", mockFetch({}));
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
     render(<App />);
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
@@ -118,7 +156,7 @@ describe("app shell", () => {
 
 describe("trace drawer", () => {
   it("stays closed until a task exists to watch", () => {
-    vi.stubGlobal("fetch", mockFetch({}));
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
     render(<App />);
 
     expect(screen.queryByText(/Agent trace/i)).not.toBeInTheDocument();
@@ -126,7 +164,7 @@ describe("trace drawer", () => {
   });
 
   it("creates a real task from the composer and opens the stream for it", async () => {
-    const fetchMock = mockFetch({ "/api/tasks": TASK });
+    const fetchMock = mockFetch({ ...BASE_HANDLERS, "/api/tasks": TASK });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App />);
@@ -134,15 +172,19 @@ describe("trace drawer", () => {
 
     await waitFor(() => expect(screen.getByText(/Agent trace/i)).toBeInTheDocument());
 
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toMatchObject({ agentKind: "scheduling" });
+    // The dashboard fetches overview + agents on mount, so the POST is not
+    // necessarily the first call — find it by method.
+    const post = (fetchMock.mock.calls as unknown as [string, RequestInit?][]).find(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ agentKind: "scheduling" });
     expect(screen.getByText(TASK.id)).toBeInTheDocument();
   });
 
   it("subscribes to the task id once the socket opens", async () => {
     vi.stubGlobal(
       "fetch",
-      mockFetch({ [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
+      mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
     );
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
@@ -158,7 +200,7 @@ describe("trace drawer", () => {
   });
 
   it("renders steps pushed over the socket, with tokens and cost", async () => {
-    vi.stubGlobal("fetch", mockFetch({ [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
@@ -174,7 +216,7 @@ describe("trace drawer", () => {
   });
 
   it("orders steps by stepNo regardless of arrival order", async () => {
-    vi.stubGlobal("fetch", mockFetch({ [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
@@ -200,7 +242,7 @@ describe("trace drawer", () => {
     // dedupe key so a step written mid-subscribe is not rendered twice.
     vi.stubGlobal(
       "fetch",
-      mockFetch({ [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [step()] }, "/api/tasks": TASK }),
+      mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [step()] }, "/api/tasks": TASK }),
     );
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
@@ -215,7 +257,7 @@ describe("trace drawer", () => {
   });
 
   it("reflects a terminal status pushed over the socket", async () => {
-    vi.stubGlobal("fetch", mockFetch({ [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
@@ -236,7 +278,7 @@ describe("trace drawer", () => {
   it("closes the socket when the drawer closes", async () => {
     vi.stubGlobal(
       "fetch",
-      mockFetch({ [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
+      mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
     );
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: /send/i }));

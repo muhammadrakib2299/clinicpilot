@@ -59,3 +59,52 @@ export async function listTasks() {
 export function traceSocketUrl(): string {
   return `${API_URL.replace(/^http/, "ws")}/ws/traces`;
 }
+
+export interface AgentSummary {
+  id: string;
+  kind: AgentKind;
+  name: string;
+  status: "active" | "degraded" | "paused";
+  tasksToday: number;
+  totalTasks: number;
+  /** null when nothing has finished — not 0, which would read as "0% success". */
+  successRate: number | null;
+  escalationRate: number | null;
+  costPerTask: number | null;
+  totalCostUsd: number;
+}
+
+export interface OverviewKpis {
+  tasksTotal: number;
+  tasksToday: number;
+  tasksOpen: number;
+  resolved: number;
+  escalated: number;
+  failed: number;
+  successRate: number | null;
+  totalCostUsd: number;
+  costPerResolvedTask: number | null;
+  modelCalls: number;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+export interface ActivityItem {
+  id: string;
+  taskId: string;
+  kind: TraceKind;
+  label: string;
+  detail: string;
+  createdAt: string;
+  agentName: string;
+}
+
+export async function listAgents() {
+  return json<AgentSummary[]>(await fetch(`${API_URL}/api/agents`));
+}
+
+export async function getOverview() {
+  return json<{ kpis: OverviewKpis; activity: ActivityItem[] }>(
+    await fetch(`${API_URL}/api/overview`),
+  );
+}
