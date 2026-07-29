@@ -126,7 +126,7 @@ the public sandbox has been wiped.
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 71 tests, 5 workspaces
-cd apps/ai && pytest && ruff check .                     # 24 tests
+cd apps/ai && pytest && ruff check .                     # 56 tests
 ```
 
 ---

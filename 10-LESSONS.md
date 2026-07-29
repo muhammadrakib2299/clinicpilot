@@ -170,6 +170,51 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-07-29 — Tool descriptions are load-bearing, and I have the numbers
+- Phase: 1
+- Context: First live run of the Claude tool-use loop — real model, real HAPI,
+  the seeded "move my Thursday appointment" scenario.
+- **It worked, and then it taught me something.** The agent read the booking,
+  listed availability, picked the earliest slot and wrote the change back. But
+  the first successful write took **4 iterations and $0.021** because of one
+  vague word in a tool schema.
+  - I described the parameter as *"FHIR Appointment id"*. The model passed
+    `Appointment/137240399` — the exact form it had just read out of the search
+    result I gave it. Completely reasonable. My executor built
+    `/Appointment/Appointment/137240399` and the server returned 400.
+  - Rewriting the description to *"Bare FHIR Appointment id with no
+    resource-type prefix — '137240399', not 'Appointment/137240399'"* dropped
+    the same task to **3 iterations and $0.016**. A 24% cost reduction and one
+    fewer round trip, from a sentence.
+  - Lesson generalised: with tool schemas, show the wrong form as well as the
+    right one. The model is inferring from context you cannot see.
+- **The error-recovery design paid for itself immediately.** I had built the
+  loop so a raising tool becomes an error `tool_result` fed back to the model
+  rather than aborting the run. On that 400, the model read the error, wrote
+  *"the appointment_id parameter should be just the numeric ID without any
+  prefix"*, retried, and succeeded — no human, no crash. Worth keeping: a tool
+  boundary that reports failure well is worth more than one that never fails.
+- **A bug the recovery hid.** The same prefix confusion meant `slot_id` arrived
+  as `Slot/137240396` and the adapter wrote the reference `Slot/Slot/137240396`
+  onto a live appointment — which HAPI **accepted**. Recovery masked a data
+  quality defect. Fixed by normalising ids at the tool boundary rather than
+  trusting either the model or the server to object.
+- **The agent asked permission, and was right to.** On the first run it stopped
+  after finding the slot and asked "would you like me to move it?" — because the
+  system prompt says not to pick for the patient when the request is ambiguous,
+  and my task text said "pick the earliest slot and confirm". Good behaviour,
+  but it means the B1 demo needs either explicit authorisation in the message or
+  a second conversational turn. Scoping an agent through its *tool surface and
+  prompt* rather than through hope is the point — and it shows up as friction in
+  exactly the place it should.
+- What I'd do differently: write the tool schema descriptions as if for someone
+  who has only ever seen the data in the format your own tools return.
+- Interview soundbite: *"One ambiguous word in a tool description cost 24% more
+  tokens and an extra round trip — the model passed a prefixed FHIR id because
+  that's the form my own search results used. I measured it, tightened the
+  schema to show both the right and wrong form, and normalised ids at the tool
+  boundary so the adapter stopped being brittle about it."*
+
 #### 2026-07-29 — FHIR writes really were harder than reads (the prediction held)
 - Phase: 1
 - Context: Building the typed FHIR R4 client the Scheduling Agent needs — read
