@@ -1,0 +1,28 @@
+# Never ship dependency or build output into the context — every image
+# reinstalls from the lockfile so builds are reproducible.
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/coverage
+**/*.tsbuildinfo
+
+# Python
+apps/ai/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+
+# VCS, CI and docs
+.git
+.github
+.gitignore
+
+# Secrets and local state
+.env
+.env.*
+!.env.example
+infra/pgdata
+infra/n8n-data
+infra/redis-data
