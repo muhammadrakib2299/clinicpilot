@@ -1,6 +1,11 @@
-# ClinicPilot — local development stack
-# Stateful infra runs in Docker; app services (web/api/ai) run via pnpm/uvicorn in dev
-# for fast reload. Production Dockerfiles for web/api/ai are added in Phase 5.
+# ClinicPilot — full local stack.
+#
+#   docker compose -f infra/docker-compose.yml up -d --wait
+#     -> Postgres+pgvector, Redis, n8n, api, ai, web, all health-gated.
+#
+# For day-to-day development run only the stateful services in Docker
+# (`pnpm up`) and the three app services on the host via pnpm/uvicorn, so you
+# keep hot reload. `pnpm up:all` is the containerised whole-stack path.
 name: clinicpilot
 
 services:
@@ -13,7 +18,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clinicpilot}
       POSTGRES_DB: ${POSTGRES_DB:-clinicpilot}
     ports:
-      - "5432:5432"
+      # Host ports are overridable so a clone-and-run does not fail on a machine
+      # that already has Postgres/Redis bound. Container ports never change.
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -29,7 +36,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -51,10 +58,89 @@ services:
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_RUNNERS_ENABLED: "true"
     ports:
-      - "5678:5678"
+      - "${N8N_PORT:-5678}:5678"
     volumes:
       - n8ndata:/home/node/.n8n
       - ../workflows:/workflows:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: clinicpilot-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 8080
+      # Both the containerised web (8081) and a host Vite dev server (5173).
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8081,http://localhost:5173}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clinicpilot}:${POSTGRES_PASSWORD:-clinicpilot}@postgres:5432/${POSTGRES_DB:-clinicpilot}
+      REDIS_URL: redis://redis:6379
+      AI_SERVICE_URL: http://ai:8000
+      N8N_BASE_URL: http://n8n:5678
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ai:
+    build:
+      context: ../apps/ai
+    container_name: clinicpilot-ai
+    restart: unless-stopped
+    environment:
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8081,http://localhost:5173}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clinicpilot}:${POSTGRES_PASSWORD:-clinicpilot}@postgres:5432/${POSTGRES_DB:-clinicpilot}
+      REDIS_URL: redis://redis:6379
+      FHIR_BASE_URL: ${FHIR_BASE_URL:-https://hapi.fhir.org/baseR4}
+      # Absent until Phase 1 — the service must still boot without it.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "${AI_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # python:slim carries no curl or wget; urllib is always there.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: clinicpilot-web
+    restart: unless-stopped
+    # 8081, not 5173, so the container never collides with a host dev server.
+    ports:
+      - "${WEB_PORT:-8081}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
 volumes:
   pgdata:
