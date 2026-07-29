@@ -1,11 +1,11 @@
 {
   "extends": "@clinicpilot/config/tsconfig/base.json",
+  "_comment": "CommonJS emit — see the note in packages/shared-types/tsconfig.json. DOM lib is here for fetch/Response/RequestInit types only; nothing touches the browser.",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "isolatedModules": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
     "noEmit": true
   },
   "include": ["src"]

@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { Agent, AgentKind, AgentStatus, PlanCode, TraceKind, TraceStep } from "./index";
+import {
+  Agent,
+  AgentKind,
+  AgentStatus,
+  PlanCode,
+  TaskChannel,
+  TaskStatus,
+  TraceKind,
+  TraceStep,
+} from "./index";
 
 describe("Agent", () => {
   it("defaults configJson so callers never handle undefined config", () => {
@@ -89,5 +98,27 @@ describe("enums stay in sync with the product surface", () => {
 
   it("covers every agent status", () => {
     expect(AgentStatus.options).toEqual(["active", "degraded", "paused"]);
+  });
+
+  it("covers every task intake channel", () => {
+    expect(TaskChannel.options).toEqual(["web", "sms", "voice", "email"]);
+  });
+
+  it("covers every task status", () => {
+    expect(TaskStatus.options).toEqual([
+      "queued",
+      "running",
+      "resolved",
+      "escalated",
+      "failed",
+    ]);
+  });
+
+  it("orders task statuses so a plain ORDER BY reads as lifecycle progress", () => {
+    // Postgres sorts an enum by declaration order, so this ordering is load-
+    // bearing for the Task Inbox — not cosmetic.
+    const { options } = TaskStatus;
+    expect(options.indexOf("queued")).toBeLessThan(options.indexOf("running"));
+    expect(options.indexOf("running")).toBeLessThan(options.indexOf("resolved"));
   });
 });

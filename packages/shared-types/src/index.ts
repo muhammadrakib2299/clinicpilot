@@ -17,6 +17,18 @@ export type AgentKind = z.infer<typeof AgentKind>;
 export const PlanCode = z.enum(["free", "pro", "clinic", "enterprise"]);
 export type PlanCode = z.infer<typeof PlanCode>;
 
+/** Where a task arrived from. Voice is a Phase 5+ stretch but reserved here. */
+export const TaskChannel = z.enum(["web", "sms", "voice", "email"]);
+export type TaskChannel = z.infer<typeof TaskChannel>;
+
+/**
+ * `resolved` and `escalated` are both terminal successes of a kind — the agent
+ * either finished the job or correctly handed it to a human. `failed` is the
+ * only outcome that means something went wrong.
+ */
+export const TaskStatus = z.enum(["queued", "running", "resolved", "escalated", "failed"]);
+export type TaskStatus = z.infer<typeof TaskStatus>;
+
 export const Agent = z.object({
   id: z.string(),
   orgId: z.string(),
