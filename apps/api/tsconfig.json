@@ -1,18 +1,17 @@
 {
+  "extends": "@clinicpilot/config/tsconfig/base.json",
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
+    "lib": ["ES2022"],
     "moduleResolution": "node",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "declaration": false,
     "outDir": "./dist",
     "baseUrl": "./",
-    "strict": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "types": ["node", "jest"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "test/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
