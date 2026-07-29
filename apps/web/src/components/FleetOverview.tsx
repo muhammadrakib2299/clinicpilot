@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Settings2, Pause, TrendingUp } from "lucide-react";
 import { AGENTS, KPIS, ACTIVITY, type TraceKind } from "@/data/mock";
-import { Card, Sparkline, StatusPill, Meter, TRACE_COLORS } from "@/components/primitives";
+import { Card, Sparkline, StatusPill, Meter } from "@/components/primitives";
+import { TRACE_COLORS } from "@/lib/trace";
 import { cn } from "@/lib/cn";
 
 function KpiTile({ kpi }: { kpi: (typeof KPIS)[number] }) {

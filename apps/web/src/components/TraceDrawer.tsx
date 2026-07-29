@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, Cpu, Wrench, Eye, Zap, TriangleAlert } from "lucide-react";
 import { SAMPLE_TRACE, type TraceKind } from "@/data/mock";
-import { TRACE_COLORS } from "@/components/primitives";
+import { TRACE_COLORS } from "@/lib/trace";
 import { cn } from "@/lib/cn";
 
 const ICONS: Record<TraceKind, typeof Cpu> = {

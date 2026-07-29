@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import type { AgentStatus, TraceKind } from "@/data/mock";
+import type { AgentStatus } from "@/data/mock";
 
 /** Flat, hairline-bordered surface. No shadows-as-depth, no gradients. */
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
@@ -57,14 +57,6 @@ export function StatusPill({ status }: { status: AgentStatus }) {
     </span>
   );
 }
-
-export const TRACE_COLORS: Record<TraceKind, string> = {
-  reason: "var(--info)",
-  tool_call: "var(--accent)",
-  observation: "var(--muted)",
-  action: "var(--success)",
-  escalation: "var(--warning)",
-};
 
 /** Quota / progress meter — single solid fill, hairline track. */
 export function Meter({ value, max, color = "var(--accent)" }: { value: number; max: number; color?: string }) {
