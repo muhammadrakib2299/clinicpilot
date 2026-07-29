@@ -129,14 +129,15 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
   - **`ts-jest` over Vitest for NestJS**, because it runs the real TypeScript
     compiler and therefore honours `emitDecoratorMetadata` — Vitest's esbuild
     transform does not, and DI resolution in tests depends on it.
-  - **One thing I could not verify locally:** the n8n image never finished
-    pulling over this connection, so its `/healthz` healthcheck is the single
-    piece of the stack unproven on my machine. Postgres, Redis, api, ai and web
-    were all confirmed healthy with live 200s. Rather than pretend, I dropped
-    `--wait` from `pnpm up` so an unverified check cannot block the dev loop, and
-    added a compose smoke job to CI that stands the *whole* stack up on every
-    push — if `/healthz` is wrong, CI says so on the first run instead of a
-    stranger hitting it.
+  - **Slow-link verification gap, and how I handled it.** The n8n image (2.48 GB)
+    would not finish pulling while I was working, so for most of the session its
+    `/healthz` check was the one piece of the stack I could not prove. Rather
+    than claim it, I dropped `--wait` from `pnpm up` so an unverified check could
+    not block the dev loop, and added a compose smoke job to CI to prove it on
+    push. The pull completed later in the session: n8n reaches healthy and
+    `/healthz` returns `{"status":"ok"}`, so `--wait` is restored and **all six
+    services are now verified locally**. Worth keeping as a habit — degrade the
+    claim to match the evidence, then upgrade it when the evidence arrives.
   - **Two of the sample trace steps share the label "Observation"**, so
     `getByText` threw on multiple matches. Switching to per-label occurrence
     counts made the assertion stronger: it now proves all six steps rendered, not

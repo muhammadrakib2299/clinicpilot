@@ -16,7 +16,7 @@
     "test": "turbo run test",
     "web": "pnpm --filter @clinicpilot/web dev",
     "api": "pnpm --filter @clinicpilot/api start:dev",
-    "up": "docker compose -f infra/docker-compose.yml up -d postgres redis n8n",
+    "up": "docker compose -f infra/docker-compose.yml up -d --wait postgres redis n8n",
     "up:all": "docker compose -f infra/docker-compose.yml up -d --build --wait",
     "down": "docker compose -f infra/docker-compose.yml down",
     "logs": "docker compose -f infra/docker-compose.yml logs -f"

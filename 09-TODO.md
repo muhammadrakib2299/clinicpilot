@@ -18,8 +18,9 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
 - [x] Add `/health` endpoints to api + ai; verify all containers reachable
 - [x] GitHub Actions: install → lint → typecheck → test (+ build; Python job for ruff/pytest)
 - [x] Write ADR-001 (Vite split) and ADR-002 (polyglot backend)
-- [x] ✅ Gate: `docker compose up` runs the full stack — postgres, redis, api, ai
-      and web verified healthy; `/api/health` and `/health` return 200 from the host
+- [x] ✅ Gate: `docker compose up` runs the full stack — **all six services**
+      (postgres, redis, n8n, api, ai, web) verified healthy; `/api/health`,
+      `/health` and n8n `/healthz` all return 200 from the host
 
 ### Phase 0 close-out (not in the original list, needed to make the gate real)
 - [x] Regenerate the lockfile across all workspaces (`pnpm build` was failing at root)
