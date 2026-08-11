@@ -6,6 +6,7 @@ import { DbModule } from "./db/db.module";
 import { FhirModule } from "./fhir/fhir.module";
 import { HealthController } from "./health/health.controller";
 import { OverviewModule } from "./overview/overview.module";
+import { QueueModule } from "./queue/queue.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { TasksModule } from "./tasks/tasks.module";
 
@@ -18,6 +19,7 @@ import { TasksModule } from "./tasks/tasks.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env"] }),
     DbModule,
+    QueueModule,
     RealtimeModule,
     TasksModule,
     AgentsModule,
