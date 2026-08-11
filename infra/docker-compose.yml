@@ -98,6 +98,29 @@ services:
       retries: 10
       start_period: 10s
 
+  # Same image as the gateway, different entrypoint. An agent run holds a
+  # connection open for tens of seconds and workers are what you scale when a
+  # backlog builds, so it gets its own process — `docker compose up -d
+  # --scale worker=3` is the whole story for throughput.
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    # No container_name: a fixed one would make `--scale` impossible, which is
+    # the one thing this service exists to allow.
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      AI_SERVICE_URL: http://ai:8000
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+    depends_on:
+      redis:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+
   ai:
     build:
       context: ../apps/ai
