@@ -286,6 +286,31 @@ export const RescheduleAppointmentInput = z
 export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentInput>;
 
 /**
+ * Body of `POST internal/messages` — one recorded follow-up.
+ *
+ * The rendered body, not a template id and values. The gateway does not own
+ * the templates and should not be re-rendering them: what it stores is what
+ * the patient would receive, which is the thing anyone asks about later.
+ */
+export const RecordMessageInput = z.object({
+  patientRef: FhirId,
+  appointmentRef: FhirId.optional(),
+  templateId: z.string().min(1).max(100),
+  body: z.string().min(1).max(2000),
+  taskId: z.string().uuid().optional(),
+});
+export type RecordMessageInput = z.infer<typeof RecordMessageInput>;
+
+export interface MessageSummary {
+  id: string;
+  patientRef: string;
+  templateId: string;
+  body: string;
+  status: string;
+  createdAt: string;
+}
+
+/**
  * What the gateway returns for an appointment.
  *
  * A projection, not the FHIR resource. ADR-008 says the AI service speaks no
