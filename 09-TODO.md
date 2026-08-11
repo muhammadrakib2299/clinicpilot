@@ -175,16 +175,35 @@ the auth that Phase 2 owns anyway.
 - [ ] Team & Invitations UI (invite by email, per-org role, pending invites)
 - [ ] ✅ Gate (SaaS MVP): signup → org → Free plan → hit quota → Stripe Checkout (test) → quota lifts, live
 
-## Phase 3 — Agents #2/#3 + Orchestration
+## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~30% — the safety layer is in**
+
+Taken safety-first rather than agents-first: redaction, fallback and the
+self-check all wrap the *existing* agent, so each one is independently
+valuable and none of them waits on the other two agents existing.
 - [ ] Follow-up Agent: n8n scheduled sequence + templated check-ins
 - [ ] Document Q&A: doc ingest → chunk → embed → `embeddings` (pgvector)
 - [ ] RAG retrieval + answers **with citations**
 - [ ] Orchestrator: route task → correct agent (routing pattern)
 - [ ] Hand-off/escalation: confidence/scope check → `escalations` + queue UI
-- [ ] Reflection/self-check before high-stakes FHIR writes
-- [ ] Model fallback (Claude → OpenAI) behind provider interface (ADR-003)
-- [ ] PHI redaction/de-identification module before LLM calls
-- [ ] Test: escalation fires; fallback triggers on simulated failure
+- [x] Reflection/self-check before high-stakes FHIR writes — the same model
+      in a *fresh* context, given the observations rather than the
+      conversation. Fails closed on an unparseable verdict; a block is fed back
+      as an error result the model can correct from, not an abort. Traced as
+      its own `reflection` kind and costed like any other call
+- [x] Model fallback behind the provider interface (ADR-003) — Sonnet then
+      Haiku, not Claude then OpenAI. `FallbackProvider` takes any
+      `LlmProvider` so OpenAI drops in unchanged, but there is no key to test
+      against and an untested failover path is worse than none. The
+      classification is the design: 5xx/429/timeouts fail over, 4xx never does
+- [x] PHI redaction before LLM calls (ADR-006) — a provider decorator, not a
+      loop step, so no future code path can route around it. Reversible
+      pseudonyms; dates and FHIR ids deliberately survive, because redacting
+      them would break the agent while looking like caution. Short of Safe
+      Harbor and says so
+- [~] Test: escalation fires; fallback triggers on simulated failure —
+      both covered (escalation since Phase 1, fallback with synthetic SDK
+      errors). Still to add: a test that the *orchestrator* escalates on an
+      out-of-scope request, which needs the orchestrator
 - [ ] ✅ Gate: 3 agents deployable, routing + hand-off + fallback work
 
 ## Phase 4 — Analytics, Observability & Polish

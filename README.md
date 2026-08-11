@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_2_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-304_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-387_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -203,9 +203,9 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 201 tests, 5 workspaces
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 202 tests, 5 workspaces
 pnpm test:integration                                    # 14, needs a live database
-cd apps/ai && pytest && ruff check .                     # 99 tests
+cd apps/ai && pytest && ruff check .                     # 171 tests
 ```
 
 ### Useful extras
@@ -269,6 +269,9 @@ to end against real Claude and a real FHIR server.
 | **Tenant isolation** | Postgres RLS on an unprivileged role, tenant set per transaction ([ADR-005](./docs/adr/ADR-005-multi-tenancy-via-row-level-security.md)). Two seeded clinics, and a switcher for the user who belongs to both |
 | **Audit log** | Append-only, enforced by trigger — the database refuses UPDATE and DELETE. Filterable, exportable, and the export is itself audited |
 | **Isolation, tested** | 14 integration tests as the unprivileged role. CI re-runs them with RLS bypassed and fails if they still pass, because a test that cannot fail is worth nothing |
+| **PHI redaction** | Identifiers become stable pseudonyms before any model call, restored before a human reads the reply ([ADR-006](./docs/adr/ADR-006-phi-redaction-before-model-calls.md)). A provider decorator, so no code path can route around it |
+| **Model fallback** | A second model behind the first, for the failures where retrying elsewhere could plausibly help — and only those ([ADR-003](./docs/adr/ADR-003-provider-fallback.md)) |
+| **Self-check before writes** | Mutating tools get a second opinion in a fresh context before they run. Fails closed; a block goes back as an observation the model can correct from |
 
 ### Still fixture data
 

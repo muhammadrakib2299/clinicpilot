@@ -170,6 +170,62 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-08-11 — Phase 3, safety first: three decorators and a second opinion
+- Phase: 3
+- Context: Started Phase 3 with the safety layer rather than the two missing
+  agents. Redaction, fallback and the self-check all wrap the agent that
+  already works, so each is independently useful and none waits on the others.
+- **Two of the three turned out to be the same shape, and that was the design
+  win.** PHI redaction and model fallback are both `LlmProvider` decorators,
+  so they compose: `RedactingProvider(FallbackProvider([...]))`. Redaction
+  outermost, deliberately — the other order leaves failing over to a second
+  vendor as a path that skips de-identification. A redaction *step* inside the
+  loop would have protected today's calls; a decorator protects every call
+  anything ever makes through that provider.
+- **The hard part of redaction was deciding what to keep.** A redactor that
+  removes too much breaks the agent silently: this is a scheduling product, so
+  scrubbing dates would produce confident nonsense, and scrubbing FHIR ids
+  would remove the agent's ability to address anything. Every pattern requires
+  structure — a scheme, a separator, a country code — specifically so none of
+  them matches a bare run of digits, because a bare run of digits here is a
+  resource id. The tests for what *survives* are as long as the tests for what
+  goes.
+  - Names are exact-match only. No regex finds names without also finding
+    ordinary words, and I would rather miss a name than corrupt the request.
+  - It is therefore not Safe Harbor de-identification, since a medical record
+    number is an identifier under §164.514(b)(2). Written into the ADR and
+    SECURITY.md rather than left implied.
+  - One thing was free: ADR-008's flat projections already keep names and phone
+    numbers out of tool results. A decision made for a different reason turned
+    out to be the single largest reduction in PHI reaching the model.
+- **For fallback, the loop is trivial and the classification is the whole
+  thing.** 5xx, 429 and timeouts fail over; 401, 400 and 404 never do, because
+  the next provider fails identically and slower. Unrecognised errors do not
+  either — they might be deterministic. And the status code beats the exception
+  class when both exist, because SDKs raise a generic `APIStatusError` for
+  anything they do not model, so a 401 can arrive wearing a transient-looking
+  name.
+- **The self-check fails closed, and the parser is why.** First attempt used
+  `startswith("APPROVE")`, which reads "APPROVED?" — a model hedging — as
+  approval. Matching the whole first word instead makes hedging a block. A
+  spurious block costs one iteration, because it goes back as an error result
+  the model can correct from; a spurious approval costs a wrong write to a
+  patient's calendar. Those are not symmetrical and the parser should not treat
+  them as if they were.
+- **An addition error, corrected.** The test badge said 304 where 201 + 14 + 99
+  is 314. Nobody would ever have noticed, which is the argument for computing
+  it rather than typing it.
+- What I'd do differently: reach for the decorator shape sooner. I started
+  writing redaction as a step inside `run_agent` and only moved it once
+  fallback needed the same seam — at which point both got simpler and the
+  composition question ("which one is outermost?") became something I had to
+  answer explicitly rather than by accident.
+- Interview soundbite: *"PHI redaction and model fallback are both decorators
+  around the same provider interface, which forced me to answer which one wraps
+  the other. Redaction goes outermost — otherwise failing over to a backup
+  model is a code path that skips de-identification, and that is exactly the
+  kind of hole you only find in an incident review."*
+
 #### 2026-08-11 — Phase 2: three bugs from asserting instead of verifying
 - Phase: 2
 - Context: Auth, RBAC, row-level security and an append-only audit log. The
@@ -613,8 +669,9 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **304 tests** (201 TypeScript,
-  99 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
+  postgres, redis, n8n) across 5 workspaces. **387 tests** (202 TypeScript unit, 14 TypeScript
+  integration, 171 Python) — the 304 previously recorded here was an addition
+  error; 201 + 14 + 99 is 314; coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%
