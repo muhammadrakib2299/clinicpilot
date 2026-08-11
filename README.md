@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-245_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-250_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -192,7 +192,7 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 151 tests, 5 workspaces
-cd apps/ai && pytest && ruff check .                     # 94 tests
+cd apps/ai && pytest && ruff check .                     # 99 tests
 ```
 
 ### Useful extras

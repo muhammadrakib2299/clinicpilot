@@ -211,6 +211,20 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
   it at a fifteen-line stub returning a success payload and watched a task go
   enqueue → dequeue → HTTP → job completed and removed from the queue. The
   branch has now executed at least once.
+- **The container caught me again, in the same way, one session later.** I had
+  written *"run the container build before assuming local green means
+  anything"* in this very log on 29 July. So I ran `pnpm up:all` before
+  claiming the queue worked — and the AI service died on import with
+  `IndexError`. My new `.env` loader computed the repo root as
+  `Path(__file__).parents[3]`, which is correct for `apps/ai/app/env.py` and
+  nonsense for `/srv/app/env.py`, where the Dockerfile puts it. 250 unit tests,
+  including one specifically checking that path, and none of them could see it,
+  because they all ran in the repo layout.
+  - Fixed by walking up for `pnpm-workspace.yaml` instead of counting. The
+    container now legitimately finds nothing, which is the correct answer
+    there, rather than raising.
+  - Worth keeping: "how deep am I in the tree" is an assumption, not a fact,
+    and the deployment artefact is where it stops being true.
 - What I'd do differently: write the claim before the queue, not after. I
   built the producer and worker first and then realised the whole retry story
   was unsound without it — the guard is what makes the retry policy safe to
@@ -533,8 +547,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **245 tests** (151 TypeScript,
-  94 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
+  postgres, redis, n8n) across 5 workspaces. **250 tests** (151 TypeScript,
+  99 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%
