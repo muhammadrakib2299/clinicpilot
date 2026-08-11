@@ -18,6 +18,65 @@ export type AgentKind = z.infer<typeof AgentKind>;
 export const PlanCode = z.enum(["free", "pro", "clinic", "enterprise"]);
 export type PlanCode = z.infer<typeof PlanCode>;
 
+/**
+ * Ordered most-privileged first. The order is the privilege hierarchy —
+ * `roleAtLeast` compares positions — so this is not a cosmetic list and must
+ * stay in step with the `user_role` enum in the gateway's schema.
+ */
+export const UserRole = z.enum(["admin", "clinician", "coordinator", "viewer"]);
+export type UserRole = z.infer<typeof UserRole>;
+
+/**
+ * Whether `role` is at least as privileged as `minimum`.
+ *
+ * A hierarchy rather than a permission matrix. Four roles that genuinely nest
+ * do not need a matrix, and the matrix version of this is the kind of thing
+ * that grows a bug where an admin cannot do something a viewer can.
+ */
+export function roleAtLeast(role: UserRole, minimum: UserRole): boolean {
+  return UserRole.options.indexOf(role) <= UserRole.options.indexOf(minimum);
+}
+
+export const LoginInput = z.object({
+  email: z.string().trim().min(1, "email is required").max(320),
+  password: z.string().min(1, "password is required").max(1024),
+  /** Optional: which membership to activate. Defaults to the first one. */
+  tenantId: z.string().uuid().optional(),
+});
+export type LoginInput = z.infer<typeof LoginInput>;
+
+/** Body of `POST /api/auth/switch-tenant`. */
+export const SwitchTenantInput = z.object({
+  tenantId: z.string().uuid(),
+});
+export type SwitchTenantInput = z.infer<typeof SwitchTenantInput>;
+
+/** A tenant the signed-in user belongs to, and their role in it. */
+export interface TenantMembership {
+  tenantId: string;
+  tenantName: string;
+  role: UserRole;
+}
+
+/** What `GET /api/auth/me` returns — the SPA's whole notion of a session. */
+export interface SessionUser {
+  id: string;
+  email: string;
+  name: string;
+  tenantId: string;
+  role: UserRole;
+  memberships: TenantMembership[];
+}
+
+/** Query for `GET /api/audit`. */
+export const AuditQuery = z.object({
+  actor: z.string().trim().max(320).optional(),
+  action: z.string().trim().max(100).optional(),
+  resourceType: z.string().trim().max(100).optional(),
+  limit: z.coerce.number().int().positive().max(500).default(100),
+});
+export type AuditQuery = z.infer<typeof AuditQuery>;
+
 /** Where a task arrived from. Voice is a Phase 5+ stretch but reserved here. */
 export const TaskChannel = z.enum(["web", "sms", "voice", "email"]);
 export type TaskChannel = z.infer<typeof TaskChannel>;
