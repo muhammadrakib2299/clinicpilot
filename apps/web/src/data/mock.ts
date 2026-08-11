@@ -6,7 +6,13 @@
 
 export type AgentStatus = "active" | "degraded" | "paused";
 export type AgentKind = "scheduling" | "followup" | "docqa";
-export type TraceKind = "reason" | "tool_call" | "observation" | "action" | "escalation";
+export type TraceKind =
+  | "reason"
+  | "reflection"
+  | "tool_call"
+  | "observation"
+  | "action"
+  | "escalation";
 
 export interface Agent {
   id: string;

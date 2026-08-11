@@ -11,7 +11,19 @@ import { USER_ROLES, type UserRole as UserRoleName } from "./roles";
 export const AgentStatus = z.enum(["active", "degraded", "paused"]);
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
-export const TraceKind = z.enum(["reason", "tool_call", "observation", "action", "escalation"]);
+/**
+ * `reflection` is a self-check the agent runs on itself before a high-stakes
+ * write — a distinct thing from `reason`, and the one an audit reviewer most
+ * wants to find next to an `action`.
+ */
+export const TraceKind = z.enum([
+  "reason",
+  "reflection",
+  "tool_call",
+  "observation",
+  "action",
+  "escalation",
+]);
 export type TraceKind = z.infer<typeof TraceKind>;
 
 export const AgentKind = z.enum(["scheduling", "followup", "docqa"]);

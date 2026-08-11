@@ -1,0 +1,13 @@
+-- A self-check the agent runs on itself before a high-stakes write.
+--
+-- Distinct from `reason`, deliberately. `reason` is the agent deciding what to
+-- do; `reflection` is the agent checking a decision it has already made
+-- against the evidence, immediately before acting on a patient's record. In an
+-- audit those are different events, and the second is the one anybody reviewing
+-- an `action` wants to find next to it.
+--
+-- `ADD VALUE IF NOT EXISTS` because re-running a migration should be a no-op,
+-- and because BEFORE 'tool_call' keeps the declaration order matching the
+-- lifecycle — Postgres sorts an enum by that order, so it is what an
+-- `ORDER BY kind` reads as.
+ALTER TYPE "trace_kind" ADD VALUE IF NOT EXISTS 'reflection' BEFORE 'tool_call';

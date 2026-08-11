@@ -8,6 +8,9 @@ import type { TraceKind } from "@/data/mock";
  */
 export const TRACE_COLORS: Record<TraceKind, string> = {
   reason: "var(--info)",
+  // Deliberately the same warning colour as `escalation`: both are the agent
+  // stopping to question itself, and both are what a reviewer scans for.
+  reflection: "var(--warning)",
   tool_call: "var(--accent)",
   observation: "var(--muted)",
   action: "var(--success)",

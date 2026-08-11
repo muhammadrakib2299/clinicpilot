@@ -89,11 +89,21 @@ describe("enums stay in sync with the product surface", () => {
   it("covers every trace step the Trace Viewer renders", () => {
     expect(TraceKind.options).toEqual([
       "reason",
+      "reflection",
       "tool_call",
       "observation",
       "action",
       "escalation",
     ]);
+  });
+
+  it("orders trace kinds the way a run actually unfolds", () => {
+    // Postgres sorts an enum by declaration order, so this is what an
+    // `ORDER BY kind` reads as — and `reflection` sits before the `action` it
+    // gates, which is the order it happens in.
+    const { options } = TraceKind;
+    expect(options.indexOf("reflection")).toBeLessThan(options.indexOf("action"));
+    expect(options.indexOf("reason")).toBeLessThan(options.indexOf("reflection"));
   });
 
   it("covers every billable plan", () => {

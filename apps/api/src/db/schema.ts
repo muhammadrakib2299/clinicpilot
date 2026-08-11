@@ -51,6 +51,7 @@ export const taskStatus = pgEnum("task_status", [
 ]);
 export const traceKind = pgEnum("trace_kind", [
   "reason",
+  "reflection",
   "tool_call",
   "observation",
   "action",

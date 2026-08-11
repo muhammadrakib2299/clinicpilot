@@ -1,4 +1,4 @@
-import { Cpu, Eye, TriangleAlert, Wrench, X, Zap } from "lucide-react";
+import { Cpu, Eye, ShieldCheck, TriangleAlert, Wrench, X, Zap } from "lucide-react";
 
 import type { TraceKind } from "@/data/mock";
 import { TRACE_COLORS } from "@/lib/trace";
@@ -7,6 +7,9 @@ import { cn } from "@/lib/cn";
 
 const ICONS: Record<TraceKind, typeof Cpu> = {
   reason: Cpu,
+  // A shield rather than another brain: `reflection` is the agent checking
+  // itself before a write, not more of the thinking that produced it.
+  reflection: ShieldCheck,
   tool_call: Wrench,
   observation: Eye,
   action: Zap,
