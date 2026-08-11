@@ -33,6 +33,18 @@ export class InternalFhirController {
     return this.fhir.findFreeSlots(query);
   }
 
+  /**
+   * Current ids for the seeded demo scenario.
+   *
+   * Not agent-facing. It exists so the demo CLI can compose "my patient id is
+   * X" without holding FHIR identifier knowledge of its own — the sandbox is
+   * wiped periodically and those ids change every time it is re-seeded.
+   */
+  @Get("seeded-scenario")
+  seededScenario() {
+    return this.fhir.seededScenario();
+  }
+
   /** The one call here that changes the world — traced as `action` upstream. */
   @Post("appointments/reschedule")
   reschedule(

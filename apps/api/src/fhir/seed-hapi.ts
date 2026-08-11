@@ -10,7 +10,7 @@ import type {
   Slot,
 } from "@clinicpilot/fhir-client";
 
-import { fhirBaseUrl } from "./config";
+import { fhirBaseUrl, SEED_SYSTEM } from "./config";
 
 const ROOT_ENV = "../../.env";
 if (existsSync(ROOT_ENV)) process.loadEnvFile(ROOT_ENV);
@@ -26,7 +26,7 @@ if (existsSync(ROOT_ENV)) process.loadEnvFile(ROOT_ENV);
  *
  * Synthetic data only. Nothing here is or resembles real PHI.
  */
-export const SEED_SYSTEM = "https://clinicpilot.dev/fhir/seed";
+export { SEED_SYSTEM } from "./config";
 
 const THURSDAY = 4;
 const TUESDAY = 2;

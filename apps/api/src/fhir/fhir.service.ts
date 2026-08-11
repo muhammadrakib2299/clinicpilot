@@ -9,7 +9,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { FhirClient, FhirConflictError, FhirError } from "@clinicpilot/fhir-client";
-import type { Appointment, Slot } from "@clinicpilot/fhir-client";
+import type { Appointment, FhirResource, Slot } from "@clinicpilot/fhir-client";
 import type {
   AppointmentSummary,
   FindAppointmentsQuery,
@@ -19,6 +19,7 @@ import type {
 } from "@clinicpilot/shared-types";
 
 import { currentTenantId } from "../common/tenant";
+import { SEED_IDENTIFIERS, SEED_SYSTEM } from "./config";
 
 /** DI token, so tests can inject a stub client without a live sandbox. */
 export const FHIR_CLIENT = Symbol("FHIR_CLIENT");
@@ -93,6 +94,37 @@ export class FhirService {
     }
 
     return toAppointmentSummary(updated);
+  }
+
+  /**
+   * Resolve the seeded demo scenario to whatever ids it has right now.
+   *
+   * The sandbox is public and periodically wiped, so `pnpm fhir:seed` recreates
+   * everything with fresh server ids. Business identifiers under our own system
+   * are the stable handle, and this is the one place that knows them — which is
+   * what lets the demo CLI compose its message without speaking FHIR.
+   */
+  async seededScenario(): Promise<{
+    patientId: string;
+    scheduleId: string;
+    appointmentId: string;
+  }> {
+    const find = (type: string, value: string) =>
+      this.call(() => this.fhir.findByIdentifier<FhirResource>(type, SEED_SYSTEM, value));
+
+    const [patient, schedule, appointment] = await Promise.all([
+      find("Patient", SEED_IDENTIFIERS.patient),
+      find("Schedule", SEED_IDENTIFIERS.schedule),
+      find("Appointment", SEED_IDENTIFIERS.appointment),
+    ]);
+
+    if (!patient?.id || !schedule?.id || !appointment?.id) {
+      throw new NotFoundException(
+        "The demo scenario is not on this FHIR server. Run `pnpm fhir:seed`.",
+      );
+    }
+
+    return { patientId: patient.id, scheduleId: schedule.id, appointmentId: appointment.id };
   }
 
   /**

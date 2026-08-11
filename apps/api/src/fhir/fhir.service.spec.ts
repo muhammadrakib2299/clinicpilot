@@ -193,6 +193,52 @@ describe("FhirService.reschedule", () => {
   });
 });
 
+describe("FhirService.seededScenario", () => {
+  const found = (id: string) => ({ resourceType: "Patient", id });
+
+  it("resolves the seeded business identifiers to today's server ids", async () => {
+    // Server ids change every time the public sandbox is wiped and re-seeded;
+    // `system|value` is ours and does not.
+    const findByIdentifier = jest
+      .fn()
+      .mockResolvedValueOnce(found("137240393"))
+      .mockResolvedValueOnce(found("137240394"))
+      .mockResolvedValueOnce(found("137240399"));
+
+    const scenario = await service({ findByIdentifier }).seededScenario();
+
+    expect(scenario).toEqual({
+      patientId: "137240393",
+      scheduleId: "137240394",
+      appointmentId: "137240399",
+    });
+  });
+
+  it("looks each resource up under the ClinicPilot seed system", async () => {
+    const findByIdentifier = jest.fn().mockResolvedValue(found("1"));
+
+    await service({ findByIdentifier }).seededScenario();
+
+    expect(findByIdentifier).toHaveBeenCalledWith(
+      "Patient",
+      "https://clinicpilot.dev/fhir/seed",
+      "patient-nair",
+    );
+  });
+
+  it("says to run the seed rather than returning a half-resolved scenario", async () => {
+    const findByIdentifier = jest
+      .fn()
+      .mockResolvedValueOnce(found("137240393"))
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(found("137240399"));
+
+    await expect(service({ findByIdentifier }).seededScenario()).rejects.toThrow(
+      /pnpm fhir:seed/,
+    );
+  });
+});
+
 describe("toHttpException", () => {
   it("maps 409 and 412 alike — both mean someone got there first", () => {
     expect(toHttpException(new FhirConflictError("update", 409))).toBeInstanceOf(ConflictException);
