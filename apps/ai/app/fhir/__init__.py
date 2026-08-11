@@ -1,5 +1,5 @@
-"""FHIR helpers for agent tool execution."""
+"""How this service gets FHIR data: by asking the gateway (ADR-008)."""
 
-from app.fhir.ids import bare_id, reference
+from app.fhir.gateway import GatewayError, GatewayFhir
 
-__all__ = ["bare_id", "reference"]
+__all__ = ["GatewayError", "GatewayFhir"]

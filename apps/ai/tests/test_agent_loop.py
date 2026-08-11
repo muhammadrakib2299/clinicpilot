@@ -330,3 +330,24 @@ class TestToolSurface:
     def test_the_system_prompt_forbids_clinical_advice(self) -> None:
         assert "clinical" in SYSTEM_PROMPT.lower()
         assert "never" in SYSTEM_PROMPT.lower()
+
+    @pytest.mark.parametrize(
+        ("tool_name", "field"),
+        [
+            ("find_appointments", "patient_id"),
+            ("find_availability", "schedule_id"),
+            ("reschedule_appointment", "appointment_id"),
+            ("reschedule_appointment", "slot_id"),
+        ],
+    )
+    def test_every_id_field_tells_the_model_to_send_a_bare_id(
+        self, tool_name: str, field: str
+    ) -> None:
+        # Measured, not stylistic: one vague id description cost an extra
+        # iteration and 24% more tokens on the first live run. Showing the
+        # wrong form as well as the right one is what fixed it.
+        tool = next(t for t in SCHEDULING_TOOLS if t.name == tool_name)
+        description = tool.input_schema["properties"][field]["description"]
+
+        assert "bare" in description.lower()
+        assert "not '" in description, "should show the wrong form explicitly"
