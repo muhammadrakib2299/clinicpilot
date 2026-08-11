@@ -96,6 +96,8 @@ class TestHappyPath:
                     },
                 )
             ),
+            # The self-check before the write consumes a call of its own.
+            reply("APPROVE"),
             reply("Done — you're now booked for Tuesday 4 August at 10:30."),
         ]
         observations = {
@@ -115,12 +117,24 @@ class TestHappyPath:
             "tool_call",
             "observation",
             # The write is `action`, not `tool_call` — that is the distinction
-            # an audit reviewer scans for.
+            # an audit reviewer scans for — and it is preceded by the
+            # self-check that approved it.
             "reason",
+            "reflection",
             "action",
             "observation",
             "reason",
         ]
+
+    def test_a_read_only_tool_is_not_reflected_on(self) -> None:
+        # One extra model call per write is the cost; paying it on every lookup
+        # would roughly double the run for no safety gain.
+        _, sink, _ = run(
+            [calls(ToolCall("t1", "find_appointments", {"patient_id": "1"})), reply("ok")],
+            lambda c: "found",
+        )
+
+        assert "reflection" not in sink.kinds
 
     def test_steps_are_numbered_from_one_without_gaps(self) -> None:
         _, sink, _ = run(

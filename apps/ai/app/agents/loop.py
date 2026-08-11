@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from app.agents import reflection
 from app.agents.trace import TraceSink, TraceStep
 from app.llm.pricing import TokenUsage, cost_usd
 from app.llm.provider import (
@@ -55,6 +56,7 @@ def run_agent(
     on_step: TraceSink,
     priced_on: date,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
+    reflect_before_writes: bool = True,
 ) -> AgentRun:
     """Drive one task to completion, emitting a trace step for every move."""
     by_name = {tool.name: tool for tool in tools}
@@ -62,6 +64,10 @@ def run_agent(
 
     step_no = 0
     totals = _UsageTotals()
+    # What the agent has actually seen. The reflection step is given this
+    # rather than the conversation, so it judges the proposal against evidence
+    # instead of against the reasoning that produced it.
+    observations: list[str] = []
 
     def emit(**kwargs: object) -> None:
         nonlocal step_no
@@ -105,6 +111,50 @@ def run_agent(
             # audit reviewer scans for, and what the Trace Viewer highlights.
             mutates = definition.mutates if definition else False
 
+            if mutates and reflect_before_writes:
+                verdict = reflection.review(
+                    provider=provider,
+                    task=task,
+                    observations=observations,
+                    call=call,
+                )
+
+                step_cost = cost_usd(verdict.response.model, verdict.response.usage, on=priced_on)
+                totals.add(verdict.response.usage, step_cost)
+
+                emit(
+                    kind="reflection",
+                    label="Self-check · " + ("approved" if verdict.approved else "blocked"),
+                    detail=verdict.detail,
+                    content={
+                        "toolUseId": call.id,
+                        "approved": verdict.approved,
+                        "tool": call.name,
+                    },
+                    tokens_in=verdict.response.usage.input_tokens,
+                    tokens_out=verdict.response.usage.output_tokens,
+                    cost_usd=step_cost,
+                    latency_ms=verdict.response.latency_ms,
+                    model=verdict.response.model,
+                    cache_read_tokens=verdict.response.usage.cache_read_input_tokens,
+                    cache_write_tokens=verdict.response.usage.cache_creation_input_tokens,
+                )
+
+                if not verdict.approved:
+                    # Fed back as an error result rather than aborting: the
+                    # model can see the objection and correct itself, which is
+                    # the same recovery path a failing tool already uses.
+                    blocked = f"Blocked by safety check: {verdict.detail}"
+                    results.append(ToolResult(call_id=call.id, content=blocked, is_error=True))
+                    observations.append(blocked)
+                    emit(
+                        kind="observation",
+                        label="Observation",
+                        detail=blocked,
+                        content={"toolUseId": call.id, "isError": True},
+                    )
+                    continue
+
             emit(
                 kind="action" if mutates else "tool_call",
                 label=f"{'Action' if mutates else 'Tool'} · {call.name}",
@@ -113,6 +163,7 @@ def run_agent(
             )
 
             observation, failed = _run_tool(call, definition, execute)
+            observations.append(f"{call.name} -> {observation}")
             results.append(ToolResult(call_id=call.id, content=observation, is_error=failed))
 
             emit(
