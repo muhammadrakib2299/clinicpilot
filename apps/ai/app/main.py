@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.agents import orchestrator
 from app.agents.gateway_sink import TaskNotRunnableError
 from app.agents.runner import (
     AGENTS,
@@ -73,6 +74,7 @@ def health() -> dict:
         "service": "clinicpilot-ai",
         "ts": datetime.now(UTC).isoformat(),
         "agents": sorted(AGENTS),
+        "routes": sorted(orchestrator.ROUTES),
     }
 
 
@@ -85,7 +87,11 @@ class RunTaskRequest(BaseModel):
     # wrong value finds no task rather than finding someone else's.
     tenant_id: str | None = Field(default=None, alias="tenantId")
     input: str = Field(min_length=1, max_length=4000)
-    agent_kind: str = Field(default="scheduling", alias="agentKind")
+    # Optional, and normally absent. A patient's message does not arrive
+    # labelled, so the orchestrator picks; naming a kind is for a caller that
+    # already knows.
+    agent_kind: str | None = Field(default=None, alias="agentKind")
+    clinic_name: str | None = Field(default=None, alias="clinicName")
 
 
 class RunTaskResponse(BaseModel):
@@ -122,6 +128,7 @@ def run(request: RunTaskRequest) -> RunTaskResponse:
             task_input=request.input,
             tenant_id=request.tenant_id,
             agent_kind=request.agent_kind,
+            **({"clinic_name": request.clinic_name} if request.clinic_name else {}),
         )
     except UnknownAgentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

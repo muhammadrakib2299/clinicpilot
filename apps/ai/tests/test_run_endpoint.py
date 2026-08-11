@@ -67,6 +67,7 @@ class TestRunTask:
         run_task(
             task_id="t-1",
             task_input="move my appointment",
+            agent_kind="scheduling",
             provider=RecordedProvider(responses=[reply("done")]),
             sink=sink,
             fhir=object(),  # never touched: this run makes no tool call
@@ -81,6 +82,7 @@ class TestRunTask:
         result = run_task(
             task_id="t-1",
             task_input="move my appointment",
+            agent_kind="scheduling",
             provider=RecordedProvider(responses=[reply("Moved to Tuesday 10:30.")]),
             sink=sink,
             fhir=object(),
@@ -107,6 +109,7 @@ class TestRunTask:
             run_task(
                 task_id="t-1",
                 task_input="move it",
+                agent_kind="scheduling",
                 provider=Exploding(),
                 sink=sink,
                 fhir=object(),
@@ -138,6 +141,7 @@ class TestRunTask:
         result = run_task(
             task_id="t-1",
             task_input="move it",
+            agent_kind="scheduling",
             provider=RecordedProvider(responses=responses),
             sink=sink,
             fhir=BrokenFhir(),
@@ -162,7 +166,13 @@ class TestRunTask:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
         with pytest.raises(ProviderUnavailableError, match="ANTHROPIC_API_KEY"):
-            run_task(task_id="t-1", task_input="x", sink=FakeSink(), fhir=object())
+            run_task(
+                task_id="t-1",
+                task_input="x",
+                agent_kind="scheduling",
+                sink=FakeSink(),
+                fhir=object(),
+            )
 
     def test_closes_a_sink_it_created_but_not_one_it_was_given(self) -> None:
         sink = FakeSink()
@@ -170,6 +180,7 @@ class TestRunTask:
         run_task(
             task_id="t-1",
             task_input="x",
+            agent_kind="scheduling",
             provider=RecordedProvider(responses=[reply("done")]),
             sink=sink,
             fhir=object(),
@@ -183,7 +194,16 @@ class TestRunEndpoint:
     def test_health_advertises_which_agents_are_deployed(self) -> None:
         body = TestClient(app).get("/health").json()
 
-        assert body["agents"] == ["scheduling"]
+        assert body["agents"] == ["followup", "scheduling"]
+
+    def test_health_advertises_the_lanes_the_router_knows(self) -> None:
+        # `docqa` is a lane the router can pick and an agent this service
+        # cannot run. Listing both makes that gap visible rather than a
+        # surprise at runtime.
+        body = TestClient(app).get("/health").json()
+
+        assert body["routes"] == ["docqa", "followup", "scheduling"]
+        assert set(body["routes"]) - set(body["agents"]) == {"docqa"}
 
     def test_returns_the_run_result_in_camel_case(self, monkeypatch) -> None:
         def fake_run(**kwargs: object):
@@ -255,7 +275,8 @@ class TestRunEndpoint:
 
         assert response.status_code == 422
 
-    def test_defaults_the_agent_kind_to_scheduling(self, monkeypatch) -> None:
+    def test_leaves_the_agent_unset_so_the_orchestrator_picks(self, monkeypatch) -> None:
+        # The old default was "scheduling", which meant nothing was ever routed.
         seen: dict = {}
 
         def fake_run(**kwargs: object):
@@ -265,11 +286,26 @@ class TestRunEndpoint:
         monkeypatch.setattr("app.main.run_task", fake_run)
         TestClient(app).post("/run", json={"taskId": "t-1", "input": "x"})
 
-        assert seen["agent_kind"] == "scheduling"
+        assert seen["agent_kind"] is None
+
+    def test_an_explicit_agent_kind_is_still_honoured(self, monkeypatch) -> None:
+        seen: dict = {}
+
+        def fake_run(**kwargs: object):
+            seen.update(kwargs)
+            raise UnknownAgentError("stop here")
+
+        monkeypatch.setattr("app.main.run_task", fake_run)
+        TestClient(app).post("/run", json={"taskId": "t-1", "input": "x", "agentKind": "followup"})
+
+        assert seen["agent_kind"] == "followup"
 
 
-def test_the_registry_is_the_routing_seam_phase_3_replaces() -> None:
-    assert set(runner.AGENTS) == {"scheduling"}
+def test_the_registry_holds_the_agents_this_service_can_actually_run() -> None:
+    # `docqa` is deliberately absent: it is seeded in the fleet and nameable by
+    # the router, but not built. A task routed to it escalates rather than
+    # being quietly handled by whichever agent happened to be nearest.
+    assert set(runner.AGENTS) == {"scheduling", "followup"}
 
 
 class TestClaimingTheTask:
@@ -321,6 +357,7 @@ class TestClaimingTheTask:
             run_task(
                 task_id="t-1",
                 task_input="x",
+                agent_kind="scheduling",
                 provider=RecordedProvider(responses=[reply("done")]),
                 sink=sink,
                 fhir=object(),

@@ -99,6 +99,33 @@ class GatewayFhir:
 
         return self._request("POST", "/api/internal/fhir/appointments/reschedule", json=payload)
 
+    def record_message(
+        self,
+        *,
+        patient_ref: str,
+        template_id: str,
+        body: str,
+        appointment_ref: str | None = None,
+        task_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Record an outbound follow-up.
+
+        Not FHIR — a ClinicPilot record — but it goes through the same gateway
+        client because it needs the same service token and tenant header, and a
+        second class for one endpoint means two places to keep those in step.
+        """
+        payload: dict[str, Any] = {
+            "patientRef": patient_ref,
+            "templateId": template_id,
+            "body": body,
+        }
+        if appointment_ref:
+            payload["appointmentRef"] = appointment_ref
+        if task_id:
+            payload["taskId"] = task_id
+
+        return self._request("POST", "/api/internal/messages", json=payload)
+
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
             response = self._client.request(
