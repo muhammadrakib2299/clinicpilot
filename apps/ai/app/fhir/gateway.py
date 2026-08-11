@@ -35,13 +35,21 @@ class GatewayFhir:
     def __init__(
         self,
         *,
+        tenant_id: str | None = None,
         base_url: str | None = None,
         client: httpx.Client | None = None,
         timeout: float = 30.0,
     ) -> None:
+        self.tenant_id = tenant_id
         self.base_url = (base_url or os.environ.get("API_URL") or DEFAULT_API_URL).rstrip("/")
         self._client = client or httpx.Client(timeout=timeout)
         self._owns_client = client is None
+
+    def _headers(self) -> dict[str, str]:
+        headers = {"x-service-token": os.environ.get("SERVICE_TOKEN", "")}
+        if self.tenant_id:
+            headers["x-tenant-id"] = self.tenant_id
+        return headers
 
     def find_appointments(
         self,
@@ -93,7 +101,9 @@ class GatewayFhir:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
-            response = self._client.request(method, f"{self.base_url}{path}", **kwargs)
+            response = self._client.request(
+                method, f"{self.base_url}{path}", headers=self._headers(), **kwargs
+            )
         except httpx.HTTPError as exc:
             raise GatewayError(f"could not reach the API gateway: {exc}") from exc
 

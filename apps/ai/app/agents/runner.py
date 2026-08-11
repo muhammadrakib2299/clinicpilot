@@ -58,6 +58,7 @@ def run_task(
     *,
     task_id: str,
     task_input: str,
+    tenant_id: str | None = None,
     agent_kind: str = "scheduling",
     provider: LlmProvider | None = None,
     fhir: GatewayFhir | None = None,
@@ -81,9 +82,9 @@ def run_task(
         provider = _default_provider()
 
     owned_fhir = fhir is None
-    fhir = fhir or GatewayFhir()
+    fhir = fhir or GatewayFhir(tenant_id=tenant_id)
     owned_sink = sink is None
-    sink = sink or GatewayTraceSink(task_id)
+    sink = sink or GatewayTraceSink(task_id, tenant_id=tenant_id)
 
     try:
         sink.mark_running()

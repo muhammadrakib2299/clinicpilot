@@ -39,19 +39,35 @@ class GatewayTraceSink:
         self,
         task_id: str,
         *,
+        tenant_id: str | None = None,
         base_url: str | None = None,
         client: httpx.Client | None = None,
         timeout: float = 10.0,
     ) -> None:
         self.task_id = task_id
+        self.tenant_id = tenant_id
         self.base_url = (base_url or os.environ.get("API_URL") or DEFAULT_API_URL).rstrip("/")
         self._client = client or httpx.Client(timeout=timeout)
         self.failures = 0
 
+    def _headers(self) -> dict[str, str]:
+        """Who we are, and which tenant's work this is.
+
+        The token authenticates the *service*; the tenant is a claim the
+        gateway scopes RLS to, so a wrong one finds no task rather than finding
+        someone else's. Neither is optional — the internal surface refuses a
+        request without the token, which is the correct default for routes that
+        read and write patient data with no user attached.
+        """
+        headers = {"x-service-token": os.environ.get("SERVICE_TOKEN", "")}
+        if self.tenant_id:
+            headers["x-tenant-id"] = self.tenant_id
+        return headers
+
     def __call__(self, step: TraceStep) -> None:
         url = f"{self.base_url}/api/internal/tasks/{self.task_id}/traces"
         try:
-            response = self._client.post(url, json=step.to_payload())
+            response = self._client.post(url, json=step.to_payload(), headers=self._headers())
             if response.status_code == 409:
                 # The gateway already has this step number — a retry landed
                 # twice. Idempotent by design; nothing to do.
@@ -72,7 +88,7 @@ class GatewayTraceSink:
         """
         url = f"{self.base_url}/api/internal/tasks/{self.task_id}/running"
         try:
-            response = self._client.post(url, json={})
+            response = self._client.post(url, json={}, headers=self._headers())
         except Exception as exc:
             raise TaskNotRunnableError(f"could not reach the gateway: {exc}") from exc
 
@@ -92,7 +108,9 @@ class GatewayTraceSink:
 
     def _post(self, path: str, payload: dict[str, object]) -> None:
         try:
-            self._client.post(f"{self.base_url}{path}", json=payload).raise_for_status()
+            self._client.post(
+                f"{self.base_url}{path}", json=payload, headers=self._headers()
+            ).raise_for_status()
         except Exception as exc:  # noqa: BLE001
             self.failures += 1
             logger.warning("failed to POST %s: %s", path, exc)

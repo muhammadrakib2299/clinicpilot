@@ -80,6 +80,10 @@ class RunTaskRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     task_id: str = Field(alias="taskId", min_length=1)
+    # Which tenant's work this is. Carried from the queue job, because a run
+    # happens with no user in the request — the gateway scopes RLS to it, so a
+    # wrong value finds no task rather than finding someone else's.
+    tenant_id: str | None = Field(default=None, alias="tenantId")
     input: str = Field(min_length=1, max_length=4000)
     agent_kind: str = Field(default="scheduling", alias="agentKind")
 
@@ -116,6 +120,7 @@ def run(request: RunTaskRequest) -> RunTaskResponse:
         result = run_task(
             task_id=request.task_id,
             task_input=request.input,
+            tenant_id=request.tenant_id,
             agent_kind=request.agent_kind,
         )
     except UnknownAgentError as exc:
