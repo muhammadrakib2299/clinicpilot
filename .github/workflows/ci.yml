@@ -74,14 +74,19 @@ jobs:
         run: pytest
 
   stack:
-    name: Stack · compose smoke test
+    name: Stack · compose smoke test + tenant isolation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # Compose resolves its env file relative to the compose file, so the
+      # scripts pass `--env-file .env` and that file has to exist.
+      - name: Configure
+        run: cp .env.example .env
+
       # This is Phase 0's exit gate, asserted rather than claimed.
       - name: Build and start the whole stack
-        run: docker compose -f infra/docker-compose.yml up -d --build --wait
+        run: docker compose -f infra/docker-compose.yml --env-file .env up -d --build --wait
 
       - name: Probe the health endpoints
         run: |
@@ -94,13 +99,62 @@ jobs:
 
       - name: Verify pgvector is installed
         run: |
-          docker compose -f infra/docker-compose.yml exec -T postgres \
+          docker compose -f infra/docker-compose.yml --env-file .env exec -T postgres \
             psql -U clinicpilot -d clinicpilot -c '\dx' | grep -q vector
+
+      # Everything below needs a Node toolchain against the running stack.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate, create the app role, seed
+        run: |
+          pnpm db:migrate
+          pnpm db:rls
+          pnpm db:seed
+
+      # The Phase 2 gate, asserted rather than claimed — the same shape as the
+      # compose smoke test above. Tenant isolation has no symptom when it is
+      # broken: a superuser connection applies no policies and raises no error,
+      # so nothing short of querying as the real role can tell you it works.
+      - name: Tenant isolation and append-only audit
+        run: pnpm test:integration
+
+      # A test that cannot fail is worth nothing. Pointing the application
+      # connection at the superuser role must break it.
+      - name: Prove those tests can fail
+        run: |
+          set -e
+          if APP_DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)" \
+               pnpm test:integration > /dev/null 2>&1; then
+            echo "::error::Isolation tests passed while RLS was bypassed — they are not testing anything."
+            exit 1
+          fi
+          echo "Confirmed: the isolation suite fails when RLS is bypassed."
 
       - name: Dump logs on failure
         if: failure()
-        run: docker compose -f infra/docker-compose.yml logs --no-color --tail 200
+        run: docker compose -f infra/docker-compose.yml --env-file .env logs --no-color --tail 200
 
       - name: Tear down
         if: always()
-        run: docker compose -f infra/docker-compose.yml down -v
+        run: docker compose -f infra/docker-compose.yml --env-file .env down -v
+
+  secrets:
+    name: Secrets · scan the tree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # `.env` is gitignored and `.env.example` carries placeholders, so this
+      # should stay quiet. It exists for the commit where that stops being true.
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
