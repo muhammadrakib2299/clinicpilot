@@ -2,13 +2,13 @@
   "name": "@clinicpilot/shared-types",
   "version": "0.1.0",
   "private": true,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/cjs/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.build.esm.json && node scripts/write-dist-markers.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -21,5 +21,18 @@
     "eslint": "^9.18.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
+  },
+  "module": "./dist/esm/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./roles": {
+      "types": "./dist/cjs/roles.d.ts",
+      "import": "./dist/esm/roles.js",
+      "require": "./dist/cjs/roles.js"
+    }
   }
 }

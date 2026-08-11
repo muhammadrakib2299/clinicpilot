@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "_comment": "ESM output for the Vite bundler. See tsconfig.json for why both formats exist.",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "declaration": false,
+    "sourceMap": true,
+    "outDir": "./dist/esm",
+    "rootDir": "./src"
+  },
+  "exclude": ["**/*.test.ts"]
+}

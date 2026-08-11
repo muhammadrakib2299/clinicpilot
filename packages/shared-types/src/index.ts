@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { USER_ROLES, type UserRole as UserRoleName } from "./roles";
+
 /**
  * Wire contracts for the API gateway — the public surface the web app calls,
  * and the `internal/` surface the AI service calls (ADR-004, ADR-008).
@@ -19,23 +21,20 @@ export const PlanCode = z.enum(["free", "pro", "clinic", "enterprise"]);
 export type PlanCode = z.infer<typeof PlanCode>;
 
 /**
- * Ordered most-privileged first. The order is the privilege hierarchy —
- * `roleAtLeast` compares positions — so this is not a cosmetic list and must
- * stay in step with the `user_role` enum in the gateway's schema.
- */
-export const UserRole = z.enum(["admin", "clinician", "coordinator", "viewer"]);
-export type UserRole = z.infer<typeof UserRole>;
-
-/**
- * Whether `role` is at least as privileged as `minimum`.
+ * Built from `USER_ROLES` so the list exists once.
  *
- * A hierarchy rather than a permission matrix. Four roles that genuinely nest
- * do not need a matrix, and the matrix version of this is the kind of thing
- * that grows a bug where an admin cannot do something a viewer can.
+ * The list and `roleAtLeast` live in `./roles`, which imports nothing — the
+ * SPA needs them and must not pull zod into the browser bundle to get them.
+ * Import from `@clinicpilot/shared-types/roles` on the client; the root export
+ * here is for the server, which parses with these schemas anyway.
  */
-export function roleAtLeast(role: UserRole, minimum: UserRole): boolean {
-  return UserRole.options.indexOf(role) <= UserRole.options.indexOf(minimum);
-}
+export const UserRole = z.enum(USER_ROLES);
+// Value and type under one name, matching every other schema in this file. It
+// has to be an alias rather than a re-export, because a re-export would
+// collide with the const above instead of merging with it.
+export type UserRole = UserRoleName;
+
+export { USER_ROLES, roleAtLeast } from "./roles";
 
 export const LoginInput = z.object({
   email: z.string().trim().min(1, "email is required").max(320),
@@ -76,6 +75,15 @@ export const AuditQuery = z.object({
   limit: z.coerce.number().int().positive().max(500).default(100),
 });
 export type AuditQuery = z.infer<typeof AuditQuery>;
+
+/**
+ * The same shape before defaults are applied — every field optional.
+ *
+ * What a caller *sends*, as opposed to what the server ends up with. The SPA
+ * builds filters incrementally and should not have to invent a `limit` it does
+ * not care about.
+ */
+export type AuditQueryInput = z.input<typeof AuditQuery>;
 
 /** Where a task arrived from. Voice is a Phase 5+ stretch but reserved here. */
 export const TaskChannel = z.enum(["web", "sms", "voice", "email"]);

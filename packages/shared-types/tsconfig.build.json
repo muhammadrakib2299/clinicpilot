@@ -1,11 +1,12 @@
 {
   "extends": "./tsconfig.json",
+  "_comment": "CommonJS output plus the declarations both formats share.",
   "compilerOptions": {
     "noEmit": false,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "./dist",
+    "outDir": "./dist/cjs",
     "rootDir": "./src"
   },
   "exclude": ["**/*.test.ts"]

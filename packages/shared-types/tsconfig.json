@@ -1,6 +1,6 @@
 {
   "extends": "@clinicpilot/config/tsconfig/base.json",
-  "_comment": "CommonJS emit, not ESM: apps/api is CommonJS for NestJS decorator metadata and cannot require() an ESM module. Vite consumes CJS without complaint, so CJS is the format that satisfies both consumers.",
+  "_comment": "Base config for both builds. apps/api is CommonJS (NestJS decorator metadata) and cannot require() an ESM module; apps/web is bundled by Vite, and rollup cannot see named exports through a CJS file it did not interop-analyse. This package shipped CJS only until the web app imported its first runtime value rather than only types — at which point the build broke. Hence dist/cjs and dist/esm.",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
