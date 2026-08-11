@@ -1,17 +1,35 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import type { AppendTraceInput, CompleteTaskInput, CreateTaskInput } from "@clinicpilot/shared-types";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { currentTenantId } from "../common/tenant";
 import { DbService } from "../db/db.service";
 import { agents, llmUsage, tasks, traces } from "../db/schema";
+import { TaskQueueService } from "../queue/task-queue.service";
 import { RealtimeService } from "../realtime/realtime.service";
+
+/**
+ * Statuses a task may be moved to `running` from.
+ *
+ * `queued` is the normal path and `failed` is a deliberate retry. The two
+ * omissions are the point: a `running` task is already in flight, and letting
+ * a second worker start it would double-spend the model and repeat the FHIR
+ * write; a `resolved` or `escalated` task is finished, and re-running it would
+ * move an appointment that has already been moved. This is what makes the
+ * queue's at-least-once delivery safe.
+ */
+const RUNNABLE_FROM = ["queued", "failed"] as const;
+
+export function isRunnable(status: string): boolean {
+  return (RUNNABLE_FROM as readonly string[]).includes(status);
+}
 
 @Injectable()
 export class TasksService {
   constructor(
     private readonly dbService: DbService,
     private readonly realtime: RealtimeService,
+    private readonly queue: TaskQueueService,
   ) {}
 
   private get db() {
@@ -44,7 +62,18 @@ export class TasksService {
       })
       .returning();
 
-    return task!;
+    // After the commit, never inside it: a job that referenced a row a rolled
+    // back transaction never wrote would be picked up and 404 immediately.
+    const queued = await this.queue.enqueue({
+      taskId: task!.id,
+      input: task!.input,
+      agentKind: input.agentKind,
+    });
+
+    // Surfaced rather than swallowed — `queued` means two different things
+    // depending on this, and the client is the only one who can tell a user
+    // their message will need a nudge.
+    return { ...task!, queued };
   }
 
   async list(limit = 50) {
@@ -80,14 +109,46 @@ export class TasksService {
     return { task, steps: steps.map(toTraceStepPayload) };
   }
 
+  /**
+   * Claim a task for a run.
+   *
+   * The claim is what makes duplicate delivery harmless. A worker whose
+   * connection dropped mid-run will retry, and the retry has no way of knowing
+   * the first attempt is still going — so the second one is refused here
+   * rather than allowed to spend a second conversation's worth of tokens
+   * moving an appointment that is already being moved.
+   */
   async markRunning(id: string) {
-    await this.findOne(id);
+    const task = await this.findOne(id);
+
+    if (!isRunnable(task.status)) {
+      throw new ConflictException(
+        `Task ${id} is ${task.status}, not runnable. ` +
+          "A task can only be run from 'queued' or after a failure.",
+      );
+    }
+
+    // Guarded in the UPDATE as well as checked above: two workers can both
+    // pass the read before either writes, and only one may win. Postgres
+    // serialises the row, so the loser updates nothing and gets the 409.
     const [updated] = await this.db
       .update(tasks)
       .set({ status: "running" })
-      .where(eq(tasks.id, id))
+      .where(and(eq(tasks.id, id), inArray(tasks.status, [...RUNNABLE_FROM])))
       .returning();
-    return updated!;
+
+    if (!updated) {
+      throw new ConflictException(`Task ${id} was claimed by another run.`);
+    }
+
+    this.realtime.publish({
+      type: "task:status",
+      taskId: id,
+      status: updated.status,
+      outcome: updated.outcome,
+    });
+
+    return updated;
   }
 
   async complete(id: string, input: CompleteTaskInput) {

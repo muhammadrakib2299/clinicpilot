@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.agents.gateway_sink import TaskNotRunnableError
 from app.agents.runner import (
     AGENTS,
     ProviderUnavailableError,
@@ -119,6 +120,11 @@ def run(request: RunTaskRequest) -> RunTaskResponse:
         )
     except UnknownAgentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TaskNotRunnableError as exc:
+        # 409, and deliberately not in the worker's retryable set: another run
+        # already holds this task, or it is finished. Retrying would spend a
+        # second conversation on work that is done or in flight.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ProviderUnavailableError as exc:
         # 503, not 500: nothing is broken, something is unconfigured, and a
         # queue should back off and retry rather than dead-letter the job.

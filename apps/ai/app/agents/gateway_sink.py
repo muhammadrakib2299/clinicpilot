@@ -18,6 +18,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_API_URL = "http://localhost:8080"
 
 
+class TaskNotRunnableError(Exception):
+    """The gateway refused to hand this task over.
+
+    Either another run already holds it or it has already finished. Raised
+    rather than logged, because the correct response is to stop: continuing
+    would spend a second conversation on work that is already in flight.
+    """
+
+
 class GatewayTraceSink:
     """A `TraceSink` that forwards to the gateway's internal task API.
 
@@ -54,7 +63,26 @@ class GatewayTraceSink:
             logger.warning("failed to post trace step %s: %s", step.step_no, exc)
 
     def mark_running(self) -> None:
-        self._post(f"/api/internal/tasks/{self.task_id}/running", {})
+        """Claim the task. Unlike the rest of this class, failure is fatal.
+
+        A step that fails to post costs an observability record. Failing to
+        claim the task means either someone else is already running it, or the
+        gateway is unreachable — and every useful thing this run would do,
+        including all of its FHIR access, goes through that gateway.
+        """
+        url = f"{self.base_url}/api/internal/tasks/{self.task_id}/running"
+        try:
+            response = self._client.post(url, json={})
+        except Exception as exc:
+            raise TaskNotRunnableError(f"could not reach the gateway: {exc}") from exc
+
+        if response.status_code == 409:
+            raise TaskNotRunnableError(_message(response))
+
+        if response.status_code >= 400:
+            raise TaskNotRunnableError(
+                f"gateway refused the claim: {response.status_code} {_message(response)}"
+            )
 
     def complete(self, status: str, outcome: str | None) -> None:
         self._post(
@@ -71,3 +99,11 @@ class GatewayTraceSink:
 
     def close(self) -> None:
         self._client.close()
+
+
+def _message(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return response.text[:200]
+    return str(body.get("message", body)) if isinstance(body, dict) else str(body)

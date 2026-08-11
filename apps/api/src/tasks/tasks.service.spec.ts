@@ -1,4 +1,32 @@
-import { isUniqueViolation, toTraceStepPayload } from "./tasks.service";
+import { isRunnable, isUniqueViolation, toTraceStepPayload } from "./tasks.service";
+
+describe("isRunnable", () => {
+  it("allows the normal path", () => {
+    expect(isRunnable("queued")).toBe(true);
+  });
+
+  it("allows a retry after a failure", () => {
+    // BullMQ replays a failed job; that has to be able to actually run.
+    expect(isRunnable("failed")).toBe(true);
+  });
+
+  it("refuses a task another run already holds", () => {
+    // The whole point of the claim. A worker whose connection dropped will
+    // retry, and it has no way to know the first attempt is still going —
+    // letting it through spends a second conversation and repeats a FHIR write.
+    expect(isRunnable("running")).toBe(false);
+  });
+
+  it("refuses a task that has already finished", () => {
+    expect(isRunnable("resolved")).toBe(false);
+    expect(isRunnable("escalated")).toBe(false);
+  });
+
+  it("refuses a status it does not recognise rather than assuming safe", () => {
+    expect(isRunnable("")).toBe(false);
+    expect(isRunnable("cancelled")).toBe(false);
+  });
+});
 
 describe("isUniqueViolation", () => {
   it("matches a bare driver error", () => {

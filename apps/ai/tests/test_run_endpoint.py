@@ -10,10 +10,12 @@ from __future__ import annotations
 
 from datetime import date
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app.agents import runner
+from app.agents.gateway_sink import GatewayTraceSink, TaskNotRunnableError
 from app.agents.runner import ProviderUnavailableError, UnknownAgentError, run_task
 from app.agents.trace import TraceStep
 from app.llm.pricing import TokenUsage
@@ -268,3 +270,73 @@ class TestRunEndpoint:
 
 def test_the_registry_is_the_routing_seam_phase_3_replaces() -> None:
     assert set(runner.AGENTS) == {"scheduling"}
+
+
+class TestClaimingTheTask:
+    """`mark_running` is the one call in the sink where failure is fatal.
+
+    Losing a trace step costs an observability record. Failing to claim the
+    task means another run already holds it — carrying on would spend a second
+    conversation moving an appointment that is already being moved.
+    """
+
+    def sink_against(self, handler) -> GatewayTraceSink:
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        return GatewayTraceSink("t-1", base_url="http://gateway.test", client=client)
+
+    def test_a_claim_that_succeeds_is_silent(self) -> None:
+        sink = self.sink_against(lambda request: httpx.Response(201, json={"status": "running"}))
+
+        sink.mark_running()  # must not raise
+
+    def test_a_409_stops_the_run(self) -> None:
+        sink = self.sink_against(
+            lambda request: httpx.Response(
+                409, json={"message": "Task t-1 was claimed by another run."}
+            )
+        )
+
+        with pytest.raises(TaskNotRunnableError, match="claimed by another run"):
+            sink.mark_running()
+
+    def test_an_unreachable_gateway_stops_the_run_too(self) -> None:
+        # Every useful thing the run would do goes through the gateway, so
+        # proceeding would burn tokens producing nothing anyone can see.
+        def refuse(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("connection refused")
+
+        with pytest.raises(TaskNotRunnableError, match="could not reach the gateway"):
+            self.sink_against(refuse).mark_running()
+
+    def test_a_refused_claim_does_not_mark_the_task_failed(self) -> None:
+        # The task belongs to the run that holds it. Writing `failed` here
+        # would clobber a healthy run's status from outside.
+        class RefusingSink(FakeSink):
+            def mark_running(self) -> None:
+                raise TaskNotRunnableError("already running")
+
+        sink = RefusingSink()
+
+        with pytest.raises(TaskNotRunnableError):
+            run_task(
+                task_id="t-1",
+                task_input="x",
+                provider=RecordedProvider(responses=[reply("done")]),
+                sink=sink,
+                fhir=object(),
+                priced_on=PRICED_ON,
+            )
+
+        assert sink.status is None
+
+    def test_the_endpoint_reports_a_refused_claim_as_409(self, monkeypatch) -> None:
+        def fake_run(**kwargs: object):
+            raise TaskNotRunnableError("Task t-1 is running, not runnable.")
+
+        monkeypatch.setattr("app.main.run_task", fake_run)
+
+        response = TestClient(app).post("/run", json={"taskId": "t-1", "input": "x"})
+
+        # Must be 409 and not 502: the worker treats 502 as retryable, and
+        # retrying a claim conflict is the double-run this all exists to stop.
+        assert response.status_code == 409
