@@ -2,8 +2,13 @@ import { NestFactory } from "@nestjs/core";
 import { WsAdapter } from "@nestjs/platform-ws";
 import { AppModule } from "./app.module";
 import { parseAllowedOrigins } from "./common/cors";
+import { assertProductionSecrets } from "./common/secrets";
 
 async function bootstrap() {
+  // Before anything binds a port. A deployment running with the placeholders
+  // from .env.example looks identical to a correct one until it is attacked.
+  assertProductionSecrets();
+
   const app = await NestFactory.create(AppModule);
   app.enableCors({ origin: parseAllowedOrigins(process.env.WEB_ORIGIN), credentials: true });
   // Native ws rather than socket.io, so the SPA uses the browser's built-in

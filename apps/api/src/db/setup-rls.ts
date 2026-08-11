@@ -101,7 +101,6 @@ function literal(value: string): string {
 if (require.main === module) {
   setupRls()
     .then(({ role, database }) => {
-      // eslint-disable-next-line no-console
       console.log(
         `role '${role}' ready on '${database}' — LOGIN, NOSUPERUSER, NOBYPASSRLS.\n` +
           "Point the gateway at APP_DATABASE_URL; /api/health reports whether RLS is enforced.",
