@@ -170,6 +170,48 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-08-11 — Three bugs found by following my own README
+- Phase: 1
+- Context: Second half of the session that closed the loop. All three of these
+  were found by *running* the documented quickstart rather than reading it —
+  and all three had been sitting in a repo whose docs called them done.
+- **`pnpm up` never ran my script.** `up` is a built-in pnpm alias for
+  `update`, so a script of that name is shadowed. The README's documented way
+  to start Postgres, Redis and n8n was silently bumping dependencies instead; I
+  watched turbo go 2.3.3 → 2.10.9 and had to revert a lockfile. Renamed to
+  `up:infra`. `up:all`, `down` and `logs` were never affected — only the
+  one-word name collided.
+  - Generalises: a script named after a package-manager verb is a trap, and
+    the failure is silent because both things "work".
+- **Compose never read the root `.env`.** It resolves its env file relative to
+  the compose file, so `-f infra/docker-compose.yml` looked for `infra/.env`,
+  which does not exist. Every `${VAR:-default}` took its default and the
+  `POSTGRES_PORT=5433` / `REDIS_PORT=6380` overrides in the root `.env` did
+  nothing at all. I found it because Redis refused to start — another project
+  held 6379, which is the *exact* collision that override exists for, and the
+  decision log above records that work as finished. It was half finished: the
+  compose file could accept the values, nothing handed them over.
+  - Fixed with `--env-file .env` rather than `--project-directory .`, because
+    the latter would also move where build contexts and volume mounts resolve.
+- **A CORS test that was really testing my shell.** Making the AI service load
+  the repo `.env` (the Node half already did) broke
+  `test_defaults_to_the_local_web_origin`. The test asserted on the
+  module-level `ALLOWED_ORIGINS`, so what it actually asserted was "nothing in
+  this environment set `WEB_ORIGIN`" — true for two weeks by luck. It then
+  failed locally while still passing in CI, where no `.env` exists, which is
+  the inverse of the usual works-on-my-machine and much easier to dismiss.
+  Extracted `parse_allowed_origins()` to mirror the gateway's version and
+  tested the function with explicit input.
+- What I'd do differently: run the quickstart from a cold start at the end of
+  every phase, not just read it. Two of these three were in the README, in
+  commands I had written and never executed in that exact form.
+- Interview soundbite: *"I found three infrastructure bugs by actually running
+  my own README. The best one: `pnpm up` is pnpm's built-in `update`, so the
+  documented command to start my database was silently upgrading dependencies
+  instead — and separately, Docker Compose was ignoring every port override in
+  my `.env` because it looks for that file next to the compose file, not at the
+  repo root. My notes said both of those were done."*
+
 #### 2026-08-11 — The loop was never closed, and the docs undersold it
 - Phase: 1
 - Context: Came back after a 13-day gap and audited real status before writing
@@ -439,8 +481,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **186 tests** (130 TypeScript,
-  56 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
+  postgres, redis, n8n) across 5 workspaces. **222 tests** (133 TypeScript,
+  89 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%

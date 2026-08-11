@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-186_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-222_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -139,13 +139,20 @@ cd apps/ai
 python -m venv .venv                      # first time only
 .venv/Scripts/activate                    # Windows — *nix: source .venv/bin/activate
 pip install -r requirements-dev.txt       # first time only
-python -m app.agents.demo
+
+python -m app.agents.demo                 # seeded "move my Thursday appointment"
+python -m app.agents.demo <task-id>       # or run a task you typed into the dashboard
 ```
 
 The agent reads the patient's booking, lists free slots, reschedules the
 appointment on the live FHIR sandbox, and every step streams into the Trace
 Viewer over a WebSocket with its own token count and dollar cost. A typical run
 is 3 iterations, 9 steps, about **$0.015**.
+
+The CLI is a hand crank, not a second implementation: it creates a task through
+the gateway and calls `POST /run` on the AI service, which is exactly what the
+BullMQ worker will do. Until that worker exists, the `<task-id>` form is how a
+message typed into the dashboard actually gets run.
 
 ### Day-to-day development (hot reload)
 
@@ -167,8 +174,8 @@ cd apps/ai && uvicorn app.main:app --reload --port 8000
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 130 tests, 5 workspaces
-cd apps/ai && pytest && ruff check .                     # 56 tests
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 133 tests, 5 workspaces
+cd apps/ai && pytest && ruff check .                     # 89 tests
 ```
 
 ### Useful extras
@@ -223,6 +230,7 @@ to end against real Claude and a real FHIR server.
 | **Trace persistence** | 5 tables, migrations, `tenant_id` everywhere ready for Phase 2 RLS |
 | **Live Trace Viewer** | steps stream over a WebSocket as the agent works, with an HTTP backfill so a drawer opened mid-run does not start mid-thought |
 | **Task creation** | the *Simulate an inbound message* box creates a real task |
+| **`POST /run`** | the AI service runs a task and reports its outcome synchronously, so a queue can retry on the answer. A failed run is recorded `failed`, never left `running` |
 
 ### Still fixture data
 
@@ -232,12 +240,11 @@ task creation are wired to the backend.
 
 ### Not built yet
 
-**The loop is not closed.** The AI service exposes only `/health` — there is no
-endpoint that runs an agent — and there is no queue, so a task created from the
-dashboard is never executed. The agent runs today only from
-`python -m app.agents.demo`, which creates its *own* task and ignores whatever
-the UI submitted. Closing that is the current work: gateway FHIR endpoints
-(done), then the AI service run endpoint, then BullMQ.
+**One link left in the loop: the queue.** A task created from the dashboard is
+still not picked up automatically — `POST /run` exists and works, but nothing
+calls it on its own, so a task sits `queued` until
+`python -m app.agents.demo <task-id>` is run against it. BullMQ is the next
+commit and the last piece.
 
 Also missing: auth and RBAC · multi-tenancy RLS · n8n workflows · Follow-up and
 Document Q&A agents · analytics and evals · deployment.

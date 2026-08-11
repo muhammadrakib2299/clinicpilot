@@ -41,14 +41,19 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
       runtime import would have crashed on startup
 
 ### Debt added during Phase 1
-- [~] `apps/ai/app/agents/demo.py` calls HAPI directly, contradicting ADR-008.
-      **Half paid (2026-08-11):** the gateway endpoints now exist and are
-      verified against the live sandbox, so the Python adapter is redundant
-      rather than load-bearing. Deleting it is the next commit
+- [x] ~~`apps/ai/app/agents/demo.py` calls HAPI directly, contradicting
+      ADR-008~~ — **paid (2026-08-11).** The adapter and `app/fhir/ids.py` are
+      deleted; the AI service reaches FHIR only through the gateway and holds
+      no id-normalisation logic of its own
 - [ ] `RealtimeService` is an in-process rxjs Subject — becomes Redis pub/sub
       when the gateway runs more than one replica (Phase 4)
 - [ ] `internal/` routes have no service token yet; they must not be publicly
-      reachable before deploy (Phase 2, alongside RBAC)
+      reachable before deploy (Phase 2, alongside RBAC). **Higher stakes since
+      2026-08-11**: the surface now reads and writes patient data with no user
+      in the request at all
+- [ ] `FhirClient` sets no HTTP timeout. A hanging HAPI hangs the gateway
+      request — the sandbox returned `fetch failed` once mid-session and took
+      7.8s on a plain read shortly after
 - [ ] No reconnect/backoff on the Trace Viewer WebSocket — a dropped socket
       shows `closed` until the drawer is reopened
 
@@ -82,11 +87,12 @@ real FHIR server today; what remains is the plumbing around it.
 ### Automation & queue
 - [ ] n8n "reschedule appointment" workflow (read slot → write appt → confirm)
 - [ ] Expose n8n webhook; call it from an AI-service tool
-- [ ] BullMQ producer (API) + worker (consumes → AI service) — **the gap that
-      matters**: a created task sits `queued` until a run is triggered by hand
-- [ ] AI service HTTP surface (`POST /run`) — today it exposes only `/health`,
-      so the loop can only be driven from a CLI script that creates its *own*
-      task and ignores whatever the UI submitted
+- [ ] BullMQ producer (API) + worker (consumes → AI service) — **the last gap**:
+      a created task sits `queued` until `python -m app.agents.demo <task-id>`
+      is run against it by hand
+- [x] AI service HTTP surface (`POST /run`) — drives the loop and reports the
+      outcome synchronously, so a queue worker can retry on the answer.
+      A failed run is recorded `failed`, never left `running`
 - [x] Gateway FHIR endpoints so the AI service stops calling HAPI directly
       (ADR-008) — `internal/fhir` serves appointments, free slots and
       reschedule off the typed client, with ids normalised at the boundary and
