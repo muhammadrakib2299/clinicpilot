@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 /**
- * Contract types shared between the web app and the API gateway.
+ * Wire contracts for the API gateway — the public surface the web app calls,
+ * and the `internal/` surface the AI service calls (ADR-004, ADR-008).
  * Zod schemas are the single source of truth; TS types are inferred.
  */
 
@@ -89,3 +90,141 @@ export const CompleteTaskInput = z.object({
   outcome: z.string().max(4000).nullish(),
 });
 export type CompleteTaskInput = z.infer<typeof CompleteTaskInput>;
+
+// ── Internal FHIR API (ADR-008) ─────────────────────────────────────────────
+//
+// The gateway owns FHIR access; the AI service calls these instead of speaking
+// FHIR itself. Every field here is ultimately filled in by a language model, so
+// the schemas are written to be tolerant of the forms a model actually produces
+// and strict about the ones that would corrupt data.
+
+/**
+ * A FHIR resource id, tolerant of a `ResourceType/` prefix.
+ *
+ * Models pass ids both ways: asked for an Appointment id, Claude supplied
+ * `Appointment/137240399` because that is the form it had just read out of a
+ * search result. The old Python adapter concatenated that into
+ * `/Appointment/Appointment/137240399` and 400'd — and in the slot case wrote a
+ * malformed `Slot/Slot/…` reference that HAPI happily accepted. Normalising
+ * here means the gateway has exactly one definition of "an id", and it is the
+ * one every caller crosses.
+ *
+ * The error message names both forms deliberately. A tool schema that shows
+ * only the right answer leaves the model guessing about what it got wrong.
+ *
+ * A leading slash is forgiven, a trailing one is not, and the asymmetry is on
+ * purpose: `Appointment/` is a prefix with the id missing, and forgiving the
+ * slash would read it as the id `Appointment` and go looking that up. A 404 on
+ * a resource nobody asked for is a worse failure than a rejected argument.
+ */
+export const FhirId = z
+  .string()
+  .transform((value) => value.trim().replace(/^\/+/, ""))
+  .pipe(
+    z
+      .string()
+      // Charset and length are the R4 spec's own: [A-Za-z0-9-.]{1,64}. The
+      // optional prefix is the only concession, and `Patient/1/_history/2`
+      // fails it rather than silently resolving to version 2.
+      .regex(
+        /^(?:[A-Za-z]+\/)?[A-Za-z0-9\-.]{1,64}$/,
+        "expected a bare FHIR id such as '137240399' — a 'Appointment/137240399' prefix is accepted, anything else is not",
+      ),
+  )
+  .transform((value) => value.split("/").pop()!);
+
+/**
+ * ISO 8601 instant. Offsets are allowed as well as `Z`.
+ *
+ * Validated rather than passed through because a malformed bound does not fail
+ * loudly downstream: a `start=ge<garbage>` search param is ignored by the
+ * server, which then returns *every* slot — a wrong answer that looks like a
+ * working query.
+ */
+const Instant = z.string().datetime({ offset: true });
+
+/**
+ * Search result sizes are capped. `_count` reaches the model's context window,
+ * so an unbounded value is a token-spend and latency hazard, not just a big
+ * response.
+ */
+const ResultCount = z.coerce.number().int().positive().max(50);
+
+/**
+ * The appointment statuses the scheduling agent can filter on — a subset of
+ * R4's fourteen. The agent handles logistics, so `entered-in-error` and the
+ * clinical-workflow states are deliberately not offered.
+ */
+export const AppointmentStatusFilter = z.enum([
+  "booked",
+  "pending",
+  "arrived",
+  "fulfilled",
+  "cancelled",
+]);
+export type AppointmentStatusFilter = z.infer<typeof AppointmentStatusFilter>;
+
+/** Query for `GET internal/fhir/appointments`. */
+export const FindAppointmentsQuery = z.object({
+  patientId: FhirId,
+  status: AppointmentStatusFilter.optional(),
+  count: ResultCount.default(20),
+});
+export type FindAppointmentsQuery = z.infer<typeof FindAppointmentsQuery>;
+
+/** Query for `GET internal/fhir/slots`. */
+export const FindFreeSlotsQuery = z.object({
+  scheduleId: FhirId,
+  from: Instant,
+  count: ResultCount.default(10),
+});
+export type FindFreeSlotsQuery = z.infer<typeof FindFreeSlotsQuery>;
+
+/**
+ * Body of `POST internal/fhir/appointments/reschedule`.
+ *
+ * The appointment id travels in the body rather than the path on purpose. It
+ * arrives from a model that prefixes ids about half the time, and
+ * `/appointments/Appointment/137240399/reschedule` matches no route — the
+ * caller would get a bare 404 instead of the id error it could actually act on.
+ * This surface is RPC for one machine caller, not a public REST API, and
+ * robustness at the boundary is worth more here than route aesthetics.
+ */
+export const RescheduleAppointmentInput = z
+  .object({
+    appointmentId: FhirId,
+    slotId: FhirId,
+    start: Instant,
+    end: Instant,
+    comment: z.string().max(500).optional(),
+  })
+  // A backwards interval is the one malformed write FHIR servers do not reliably
+  // reject, and it lands on a real patient's calendar.
+  .refine((input) => Date.parse(input.end) > Date.parse(input.start), {
+    path: ["end"],
+    message: "end must be after start",
+  });
+export type RescheduleAppointmentInput = z.infer<typeof RescheduleAppointmentInput>;
+
+/**
+ * What the gateway returns for an appointment.
+ *
+ * A projection, not the FHIR resource. ADR-008 says the AI service speaks no
+ * FHIR; handing it a raw R4 `Appointment` would make that false in practice,
+ * because the tool executor would have to know where `start` lives and how
+ * `participant` nests. Widen this as agents need more, not in anticipation.
+ */
+export interface AppointmentSummary {
+  id: string;
+  status: string;
+  start: string | null;
+  end: string | null;
+  description: string | null;
+}
+
+/** What the gateway returns for a free slot. */
+export interface SlotSummary {
+  id: string;
+  start: string;
+  end: string;
+}

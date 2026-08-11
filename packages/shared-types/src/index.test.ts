@@ -4,7 +4,11 @@ import {
   Agent,
   AgentKind,
   AgentStatus,
+  FhirId,
+  FindAppointmentsQuery,
+  FindFreeSlotsQuery,
   PlanCode,
+  RescheduleAppointmentInput,
   TaskChannel,
   TaskStatus,
   TraceKind,
@@ -120,5 +124,140 @@ describe("enums stay in sync with the product surface", () => {
     const { options } = TaskStatus;
     expect(options.indexOf("queued")).toBeLessThan(options.indexOf("running"));
     expect(options.indexOf("running")).toBeLessThan(options.indexOf("resolved"));
+  });
+});
+
+describe("FhirId", () => {
+  it("accepts a bare id unchanged", () => {
+    expect(FhirId.parse("137240399")).toBe("137240399");
+  });
+
+  it("strips the resource-type prefix a model tends to supply", () => {
+    // The exact input that produced /Appointment/Appointment/137240399 and a
+    // 400 on the first live agent run.
+    expect(FhirId.parse("Appointment/137240399")).toBe("137240399");
+    expect(FhirId.parse("Slot/137240396")).toBe("137240396");
+  });
+
+  it("tolerates surrounding whitespace and a leading slash", () => {
+    expect(FhirId.parse("  /Patient/137240393 ")).toBe("137240393");
+  });
+
+  it("accepts the full R4 id charset", () => {
+    expect(FhirId.parse("appt-current.v2")).toBe("appt-current.v2");
+  });
+
+  it("rejects a versioned reference rather than silently reading the version", () => {
+    // Taking the last segment of Patient/1/_history/2 would address "2".
+    expect(FhirId.safeParse("Patient/137240393/_history/2").success).toBe(false);
+  });
+
+  it("rejects an empty id", () => {
+    expect(FhirId.safeParse("").success).toBe(false);
+    expect(FhirId.safeParse("   ").success).toBe(false);
+  });
+
+  it("rejects a prefix with the id missing rather than looking up 'Appointment'", () => {
+    // Forgiving the trailing slash here would read the resource type as the id
+    // and 404 on a resource nobody asked about.
+    expect(FhirId.safeParse("Appointment/").success).toBe(false);
+    expect(FhirId.safeParse("Patient/137240393/").success).toBe(false);
+  });
+
+  it("rejects an id over the spec's 64 characters", () => {
+    expect(FhirId.safeParse("a".repeat(65)).success).toBe(false);
+  });
+
+  it("names both accepted forms in its error, so the model can self-correct", () => {
+    const result = FhirId.safeParse("not a valid id!");
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toContain("137240399");
+      expect(result.error.issues[0]?.message).toContain("Appointment/137240399");
+    }
+  });
+});
+
+describe("FindAppointmentsQuery", () => {
+  it("normalises the patient id and defaults the result count", () => {
+    const parsed = FindAppointmentsQuery.parse({ patientId: "Patient/137240393" });
+
+    expect(parsed.patientId).toBe("137240393");
+    expect(parsed.count).toBe(20);
+  });
+
+  it("coerces count from the string a query parameter actually arrives as", () => {
+    expect(FindAppointmentsQuery.parse({ patientId: "1", count: "5" }).count).toBe(5);
+  });
+
+  it("caps count, so a model cannot pull the context window full of bundles", () => {
+    expect(FindAppointmentsQuery.safeParse({ patientId: "1", count: "5000" }).success).toBe(false);
+  });
+
+  it("rejects a status outside the scheduling agent's subset", () => {
+    // 'entered-in-error' is real R4 but is not the agent's business.
+    const result = FindAppointmentsQuery.safeParse({
+      patientId: "1",
+      status: "entered-in-error",
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("FindFreeSlotsQuery", () => {
+  it("accepts a UTC instant and an offset instant", () => {
+    expect(
+      FindFreeSlotsQuery.parse({ scheduleId: "Schedule/1", from: "2026-08-13T09:00:00Z" }).from,
+    ).toBe("2026-08-13T09:00:00Z");
+
+    expect(
+      FindFreeSlotsQuery.safeParse({ scheduleId: "1", from: "2026-08-13T09:00:00+01:00" }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a malformed instant instead of returning every slot", () => {
+    // A bad `start=ge…` bound is ignored server-side, and the unfiltered result
+    // looks exactly like a working query.
+    expect(FindFreeSlotsQuery.safeParse({ scheduleId: "1", from: "next Tuesday" }).success).toBe(
+      false,
+    );
+    expect(FindFreeSlotsQuery.safeParse({ scheduleId: "1", from: "2026-08-13" }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe("RescheduleAppointmentInput", () => {
+  const valid = {
+    appointmentId: "Appointment/137240399",
+    slotId: "Slot/137240396",
+    start: "2026-08-18T10:30:00Z",
+    end: "2026-08-18T11:00:00Z",
+  };
+
+  it("normalises both ids", () => {
+    const parsed = RescheduleAppointmentInput.parse(valid);
+
+    expect(parsed.appointmentId).toBe("137240399");
+    expect(parsed.slotId).toBe("137240396");
+  });
+
+  it("rejects an interval that ends before it starts", () => {
+    const result = RescheduleAppointmentInput.safeParse({
+      ...valid,
+      start: "2026-08-18T11:00:00Z",
+      end: "2026-08-18T10:30:00Z",
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.path).toEqual(["end"]);
+  });
+
+  it("rejects a zero-length appointment", () => {
+    expect(
+      RescheduleAppointmentInput.safeParse({ ...valid, end: valid.start }).success,
+    ).toBe(false);
   });
 });
