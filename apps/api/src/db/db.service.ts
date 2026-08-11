@@ -41,6 +41,22 @@ export class DbService implements OnModuleDestroy {
     });
   }
 
+  /**
+   * Run a unit of work as a user, with no tenant chosen yet.
+   *
+   * Only login and the session endpoints need this. It sets `app.user_id`,
+   * which the `memberships` policy accepts as an alternative to a tenant —
+   * because discovering which tenants you belong to is necessarily something
+   * you do before you have one. Every other table stays invisible: no tenant
+   * is set, so `app_current_tenant()` is NULL and nothing matches.
+   */
+  async withUser<T>(userId: string, work: (tx: Db) => Promise<T>): Promise<T> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('app.user_id', ${userId}, true)`);
+      return work(tx as unknown as Db);
+    });
+  }
+
   /** Same, for the tenant on the current request. */
   async withCurrentTenant<T>(work: (tx: Db) => Promise<T>): Promise<T> {
     const actor = currentActor();

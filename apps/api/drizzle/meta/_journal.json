@@ -22,6 +22,13 @@
       "when": 1786448731601,
       "tag": "0002_phase2_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786448731602,
+      "tag": "0003_phase2_self_membership",
+      "breakpoints": true
     }
   ]
 }

@@ -169,22 +169,29 @@ export class AuthService {
   /**
    * Which tenants this user belongs to.
    *
-   * `memberships` is RLS-protected, and this deliberately runs outside a tenant
-   * context — the whole point is to discover which tenants there are. It is
-   * scoped by `user_id` instead, which is the one filter that is safe here
-   * because the user id came from a verified token or a verified password.
+   * Runs inside `withUser`, not `withTenant`: there is no tenant yet — finding
+   * out which ones exist is the whole point. The `memberships` policy accepts
+   * `app.user_id` as an alternative to a tenant for exactly this, so RLS is
+   * still enforced rather than stepped around.
+   *
+   * An earlier version queried this with no context at all and a `user_id`
+   * filter, on the reasoning that the filter was sufficient. It is not — RLS
+   * matched nothing and every login failed with "no memberships". The policy
+   * is the authority, not the WHERE clause.
    */
   private async membershipsFor(userId: string): Promise<TenantMembership[]> {
-    return this.dbService.db
-      .select({
-        tenantId: memberships.tenantId,
-        tenantName: tenants.name,
-        role: memberships.role,
-      })
-      .from(memberships)
-      .innerJoin(tenants, eq(tenants.id, memberships.tenantId))
-      .where(eq(memberships.userId, userId))
-      .orderBy(tenants.name);
+    return this.dbService.withUser(userId, (tx) =>
+      tx
+        .select({
+          tenantId: memberships.tenantId,
+          tenantName: tenants.name,
+          role: memberships.role,
+        })
+        .from(memberships)
+        .innerJoin(tenants, eq(tenants.id, memberships.tenantId))
+        .where(eq(memberships.userId, userId))
+        .orderBy(tenants.name),
+    );
   }
 
   private async sign(userId: string, email: string, membership: TenantMembership) {
