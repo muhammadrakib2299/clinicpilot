@@ -1,7 +1,7 @@
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import { currentActor } from "../common/request-context";
+import { currentActor, runInRequestScope } from "../common/request-context";
 import { PUBLIC_KEY, ROLES_KEY, SERVICE_KEY } from "./auth.decorators";
 import { AuthGuard, timingSafeEqualString } from "./auth.guard";
 import type { AuthService, TokenClaims } from "./auth.service";
@@ -34,6 +34,13 @@ function reflectorFor(key?: string, value: unknown = true): Reflector {
   } as unknown as Reflector;
 }
 
+/**
+ * Every call goes through a request scope, because that is what the middleware
+ * provides in production — the guard fills a scope in, it does not open one.
+ */
+const activate = (guard: AuthGuard, context: ExecutionContext) =>
+  runInRequestScope(() => guard.canActivate(context));
+
 const authStub = (claims: TokenClaims = CLAIMS) =>
   ({ verify: () => claims }) as unknown as AuthService;
 
@@ -54,20 +61,20 @@ describe("AuthGuard", () => {
   it("lets a @Public route through with no token", async () => {
     const guard = new AuthGuard(reflectorFor(PUBLIC_KEY), failingAuth());
 
-    await expect(guard.canActivate(contextWith())).resolves.toBe(true);
+    await expect(activate(guard, contextWith())).resolves.toBe(true);
   });
 
   it("refuses a protected route with no Authorization header", async () => {
     const guard = new AuthGuard(reflectorFor(), authStub());
 
-    await expect(guard.canActivate(contextWith())).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(activate(guard, contextWith())).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("refuses an Authorization header that is not a bearer token", async () => {
     const guard = new AuthGuard(reflectorFor(), authStub());
 
     await expect(
-      guard.canActivate(contextWith({ authorization: "Basic dXNlcjpwYXNz" })),
+      activate(guard, contextWith({ authorization: "Basic dXNlcjpwYXNz" })),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
@@ -75,7 +82,7 @@ describe("AuthGuard", () => {
     const guard = new AuthGuard(reflectorFor(), authStub());
     const context = contextWith({ authorization: "Bearer valid" });
 
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+    await expect(activate(guard, context)).resolves.toBe(true);
 
     const actor = (
       context.switchToHttp().getRequest() as { actor?: ReturnType<typeof currentActor> }
@@ -98,7 +105,7 @@ describe("AuthGuard", () => {
       "x-tenant-id": "00000000-0000-4000-8000-000000000002",
     });
 
-    await guard.canActivate(context);
+    await activate(guard, context);
 
     const actor = (
       context.switchToHttp().getRequest() as { actor?: ReturnType<typeof currentActor> }
@@ -113,18 +120,19 @@ describe("AuthGuard", () => {
 
     it("admits a role above the minimum", async () => {
       await expect(
-        withRole("admin", "coordinator").canActivate(contextWith({ authorization: "Bearer t" })),
+        activate(withRole("admin", "coordinator"), contextWith({ authorization: "Bearer t" })),
       ).resolves.toBe(true);
     });
 
     it("admits a role exactly at the minimum", async () => {
       await expect(
-        withRole("viewer", "viewer").canActivate(contextWith({ authorization: "Bearer t" })),
+        activate(withRole("viewer", "viewer"), contextWith({ authorization: "Bearer t" })),
       ).resolves.toBe(true);
     });
 
     it("refuses a role below the minimum, and says which is needed", async () => {
-      const attempt = withRole("viewer", "coordinator").canActivate(
+      const attempt = activate(
+        withRole("viewer", "coordinator"),
         contextWith({ authorization: "Bearer t" }),
       );
 
@@ -141,7 +149,7 @@ describe("AuthGuard", () => {
       const guard = new AuthGuard(reflectorFor(SERVICE_KEY), authStub());
 
       await expect(
-        guard.canActivate(contextWith({ "x-service-token": "anything" })),
+        activate(guard, contextWith({ "x-service-token": "anything" })),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
@@ -150,7 +158,7 @@ describe("AuthGuard", () => {
       const guard = new AuthGuard(reflectorFor(SERVICE_KEY), authStub());
 
       await expect(
-        guard.canActivate(contextWith({ "x-service-token": "not-it" })),
+        activate(guard, contextWith({ "x-service-token": "not-it" })),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
@@ -158,7 +166,7 @@ describe("AuthGuard", () => {
       process.env["SERVICE_TOKEN"] = "the-real-token";
       const guard = new AuthGuard(reflectorFor(SERVICE_KEY), authStub());
 
-      await expect(guard.canActivate(contextWith())).rejects.toBeInstanceOf(
+      await expect(activate(guard, contextWith())).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
     });
@@ -168,7 +176,7 @@ describe("AuthGuard", () => {
       const guard = new AuthGuard(reflectorFor(SERVICE_KEY), failingAuth());
 
       await expect(
-        guard.canActivate(contextWith({ "x-service-token": "the-real-token" })),
+        activate(guard, contextWith({ "x-service-token": "the-real-token" })),
       ).resolves.toBe(true);
     });
   });

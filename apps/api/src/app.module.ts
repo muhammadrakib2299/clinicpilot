@@ -1,9 +1,10 @@
-import { Module } from "@nestjs/common";
+import { Module, type MiddlewareConsumer, type NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 
 import { AgentsModule } from "./agents/agents.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { RequestContextMiddleware } from "./common/request-context";
 import { DbModule } from "./db/db.module";
 import { FhirModule } from "./fhir/fhir.module";
 import { HealthController } from "./health/health.controller";
@@ -38,4 +39,15 @@ import { TasksModule } from "./tasks/tasks.module";
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  /**
+   * Opens the per-request scope before anything else runs.
+   *
+   * Middleware, not a guard or an interceptor: it has to *wrap* the rest of
+   * the pipeline, and only middleware wraps guards as well as the handler. The
+   * guard populates the scope this opens.
+   */
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestContextMiddleware).forRoutes("*path");
+  }
+}

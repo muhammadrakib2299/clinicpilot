@@ -11,7 +11,7 @@ import { Reflector } from "@nestjs/core";
 import { roleAtLeast, type UserRole } from "@clinicpilot/shared-types";
 import type { Request } from "express";
 
-import { runWithActor, type RequestActor } from "../common/request-context";
+import { setActor, type RequestActor } from "../common/request-context";
 import { AuthService } from "./auth.service";
 import { PUBLIC_KEY, ROLES_KEY, SERVICE_KEY } from "./auth.decorators";
 
@@ -22,9 +22,10 @@ import { PUBLIC_KEY, ROLES_KEY, SERVICE_KEY } from "./auth.decorators";
  * explicitly. The alternative — decorating each controller — fails open, and
  * the thing it fails open on here is patient data.
  *
- * It also opens the AsyncLocalStorage scope that carries the actor for the
- * rest of the request, which is why it wraps `next.handle()` rather than
- * simply returning true.
+ * It does not open the AsyncLocalStorage scope — `RequestContextMiddleware`
+ * does, before this runs. A guard cannot: its scope would close the moment it
+ * returned `true`, leaving the controller outside it. This fills in the store
+ * the middleware already opened.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -68,10 +69,12 @@ export class AuthGuard implements CanActivate {
 
     (request as Request & { actor?: RequestActor }).actor = actor;
 
-    // Everything downstream — controller, services, queries — runs inside this
-    // scope, which is what makes `currentTenantId()` work without threading a
-    // parameter through every call.
-    return runWithActor(actor, () => true);
+    // Into the scope the middleware opened. Everything downstream —
+    // controller, services, queries — reads the actor from there, which is
+    // what makes `currentTenantId()` work without a parameter on every call.
+    setActor(actor);
+
+    return true;
   }
 
   /**
