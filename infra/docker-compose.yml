@@ -107,13 +107,20 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8081,http://localhost:5173}
       DATABASE_URL: postgresql://${POSTGRES_USER:-clinicpilot}:${POSTGRES_PASSWORD:-clinicpilot}@postgres:5432/${POSTGRES_DB:-clinicpilot}
       REDIS_URL: redis://redis:6379
+      # Where this service calls *back* to: trace steps, task status and all
+      # FHIR access go through the gateway (ADR-004, ADR-008). Without it the
+      # default is localhost, which inside this container is the AI service
+      # itself — every callback would quietly 404.
+      API_URL: http://api:8080
       FHIR_BASE_URL: ${FHIR_BASE_URL:-https://hapi.fhir.org/baseR4}
-      # Absent until Phase 1 — the service must still boot without it.
+      # The service boots without a key; `POST /run` answers 503 until one is set.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "${AI_PORT:-8000}:8000"
     depends_on:
       postgres:
+        condition: service_healthy
+      api:
         condition: service_healthy
     healthcheck:
       # python:slim carries no curl or wget; urllib is always there.
