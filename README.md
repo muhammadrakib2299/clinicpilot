@@ -89,6 +89,11 @@ Claude calls. Everything else works without it.
 > (`POSTGRES_PORT`, `REDIS_PORT`, `WEB_PORT`, `API_PORT`, `N8N_PORT`). A machine
 > with its own Postgres on 5432 or Redis on 6379 is common — set
 > `POSTGRES_PORT=5433` and `REDIS_PORT=6380` and nothing else needs to change.
+>
+> The `.env` copied in step 1 is required, not optional: Compose resolves its
+> env file relative to the compose file, so the scripts pass `--env-file .env`
+> explicitly. Without that it silently ignored every override above and bound
+> the defaults anyway.
 
 ### 2. Start the stack
 
@@ -148,12 +153,16 @@ Containers are fine for a demo but slow to iterate on. For development, run the
 stateful services in Docker and the apps on the host:
 
 ```bash
-pnpm up            # Postgres+pgvector, Redis, n8n only
+pnpm up:infra      # Postgres+pgvector, Redis, n8n only
 pnpm web           # Vite dev server  -> http://localhost:5173
 pnpm api           # NestJS in watch mode -> http://localhost:8080
 
 cd apps/ai && uvicorn app.main:app --reload --port 8000
 ```
+
+> This script used to be called `pnpm up`, which does not do what it looks
+> like: `up` is pnpm's own alias for `update`, so it shadowed the script and
+> quietly bumped dependencies instead of starting Postgres.
 
 ### Verify everything
 

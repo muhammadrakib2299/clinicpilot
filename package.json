@@ -21,10 +21,10 @@
     "db:seed": "turbo run db:seed",
     "db:studio": "pnpm --filter @clinicpilot/api db:studio",
     "fhir:seed": "turbo run fhir:seed",
-    "up": "docker compose -f infra/docker-compose.yml up -d --wait postgres redis n8n",
-    "up:all": "docker compose -f infra/docker-compose.yml up -d --build --wait",
-    "down": "docker compose -f infra/docker-compose.yml down",
-    "logs": "docker compose -f infra/docker-compose.yml logs -f"
+    "up:infra": "docker compose -f infra/docker-compose.yml --env-file .env up -d --wait postgres redis n8n",
+    "up:all": "docker compose -f infra/docker-compose.yml --env-file .env up -d --build --wait",
+    "down": "docker compose -f infra/docker-compose.yml --env-file .env down",
+    "logs": "docker compose -f infra/docker-compose.yml --env-file .env logs -f"
   },
   "devDependencies": {
     "turbo": "^2.3.3"
