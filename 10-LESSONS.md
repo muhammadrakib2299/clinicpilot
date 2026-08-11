@@ -212,6 +212,21 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
   web build. Fixing it dragged zod into the browser: +17 KB gzipped for one
   comparison, in a project that rejected socket.io over 40 KB. Split the roles
   into a dependency-free entry point; back to 73.5 KB.
+- **Closing the phase found one more.** Automating the isolation checks meant
+  `process.loadEnvFile` in a jest spec — which runs, succeeds, and changes
+  nothing the test can see. Jest's node environment hands each file a *copy* of
+  `process.env`; that function is a native binding writing to the real process.
+  The tests fell back to the default connection URL and failed with "password
+  authentication failed", which sends you looking at credentials rather than at
+  where they came from. `globalSetup` runs before the sandboxes exist.
+  - The fix that mattered more: making the failure message name the host it
+    tried. "Auth failed" is not a diagnosis; "auth failed connecting to
+    localhost:5432 when .env says 5433" is.
+- **A test that cannot fail is worth nothing, so CI proves this one can.** The
+  isolation suite has a specific way of becoming vacuous: point it at a
+  superuser connection and every assertion still holds while nothing is
+  enforced. So CI runs it a second time with RLS deliberately bypassed and
+  fails the build if it still passes.
 - What I'd do differently: run the thing before writing the comment that
   explains why it works. Every one of these was a confident sentence in a
   docstring next to code that did something else.
@@ -598,7 +613,7 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **290 tests** (191 TypeScript,
+  postgres, redis, n8n) across 5 workspaces. **304 tests** (201 TypeScript,
   99 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost

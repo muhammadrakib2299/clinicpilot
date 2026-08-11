@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_2_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-290_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-304_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -203,7 +203,8 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 191 tests, 5 workspaces
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 201 tests, 5 workspaces
+pnpm test:integration                                    # 14, needs a live database
 cd apps/ai && pytest && ruff check .                     # 99 tests
 ```
 
@@ -267,6 +268,7 @@ to end against real Claude and a real FHIR server.
 | **Auth + RBAC** | Login, four hierarchical roles, one global guard that closes every route by default. A service token in front of `internal/`, compared in constant time |
 | **Tenant isolation** | Postgres RLS on an unprivileged role, tenant set per transaction ([ADR-005](./docs/adr/ADR-005-multi-tenancy-via-row-level-security.md)). Two seeded clinics, and a switcher for the user who belongs to both |
 | **Audit log** | Append-only, enforced by trigger — the database refuses UPDATE and DELETE. Filterable, exportable, and the export is itself audited |
+| **Isolation, tested** | 14 integration tests as the unprivileged role. CI re-runs them with RLS bypassed and fails if they still pass, because a test that cannot fail is worth nothing |
 
 ### Still fixture data
 

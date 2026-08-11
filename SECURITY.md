@@ -28,10 +28,10 @@ one that names them.
 
 | Gap | Status |
 |---|---|
-| **No authentication.** There is no login, no session, and no user model. Every request runs as a single hardcoded demo tenant behind `currentTenantId()` | Phase 2 |
-| **`internal/` routes have no service token.** They read and write patient data with no user in the request at all, and must not be publicly reachable before deploy | Phase 2 |
-| **No row-level security.** `tenant_id` is on every table and every query filters by it, but nothing at the database enforces that an application bug cannot cross tenants | Phase 2 (ADR-005) |
-| **No audit log.** PHI access is instrumented at one call site and written to the application log, which is not an audit trail | Phase 2 |
+| **The session token is in `localStorage`.** A script injected into the page could read it, where an httpOnly cookie could not. The SPA and the API are separate origins by design ([ADR-001](./docs/adr/ADR-001-vite-split-frontend.md)), so a cookie session needs `SameSite=None`, CORS credentials and CSRF protection on every mutation — real work, done alongside TLS. Mitigated only by a 12-hour expiry | Phase 5 |
+| **No TLS locally.** Everything in `docker compose` speaks plain HTTP on the loopback interface. A self-signed certificate would add a browser warning and no security; the real transport boundary is the deployment edge | Phase 5 |
+| **No token revocation.** Sessions are stateless JWTs, so signing out discards the client's copy and nothing else. A leaked token stays valid until it expires | Phase 2.5 |
+| **Audit writes are best-effort.** The database guarantees an entry cannot be *altered*, not that one exists — a failed write is logged loudly rather than rolling back the action it was recording | Phase 4 |
 | **No PHI redaction before model calls.** Patient context reaches Claude unredacted. Acceptable only because the data is synthetic | Phase 3 (ADR-006) |
 | **No rate limiting or spend cap.** A deployed demo could be driven to spend real money on model calls | Phase 5 |
 
@@ -39,9 +39,38 @@ one that names them.
 
 Not a compliance claim — just the things that are actually true today.
 
+- **Authentication on every route by default.** One global guard; a controller
+  is closed until it explicitly opts out with `@Public()` or `@ServiceOnly()`,
+  so forgetting a decorator locks a route down rather than opening it.
+- **Four hierarchical roles**, enforced server-side. The SPA hides what a role
+  cannot reach, but hiding is not the control — the guard is.
+- **Tenant isolation enforced by Postgres**, not by the application
+  ([ADR-005](./docs/adr/ADR-005-multi-tenancy-via-row-level-security.md)).
+  Row-level security on a `NOSUPERUSER NOBYPASSRLS` role, tenant set per
+  transaction. A query that forgets its scope sees nothing rather than
+  everything. Verified in CI by a suite that is itself verified: the build
+  fails if those tests still pass while RLS is deliberately bypassed.
+- **`/api/health` reports whether isolation is actually being enforced**, and
+  degrades when it is not. Superusers bypass RLS silently, so the only defence
+  against that misconfiguration is to make it visible.
+- **An append-only audit log**, enforced by trigger. The database refuses
+  `UPDATE` and `DELETE`, and `TRUNCATE` is not granted because it would skip
+  the trigger. Reading it needs the admin role; exporting it is itself audited.
+- **The `internal/` surface requires a service token**, compared in constant
+  time. An unset `SERVICE_TOKEN` refuses every request rather than allowing
+  them — the convenient default is the one that ships an open door.
+- **Passwords are scrypt-hashed** with per-password salts and cost parameters
+  stored in the hash. Login failures are uniform and an unknown email is still
+  verified against a decoy, so response time does not answer "does this address
+  have an account at this clinic".
 - **No secrets in the repository.** `.env` is gitignored; `.env.example` carries
-  placeholders only. The Anthropic key is read from the environment and is never
-  logged, echoed, or included in a trace step.
+  placeholders only, and CI runs a secrets scan over the history. The Anthropic
+  key is read from the environment and is never logged, echoed, or included in
+  a trace step.
+- **Production refuses to start with development secrets.** A deployment using
+  the `.env.example` placeholders boots and serves traffic identically to a
+  correct one, so the check is explicit and fatal rather than a startup warning
+  nobody reads.
 - **CORS is an explicit allowlist** on both backends, parsed the same way in
   each, and reads from one variable. The AI service used to send `*`; that was
   the wrong default for a service whose job is forwarding patient context to a
@@ -61,7 +90,21 @@ Not a compliance claim — just the things that are actually true today.
   record.
 - **Money is `numeric`, never float**, so cost accounting reconciles exactly.
 
+## Secrets handling
+
+Every secret is read from the environment; none has a working default. The
+gateway will not start without `JWT_SECRET`, and `assertProductionSecrets`
+refuses to boot when `NODE_ENV=production` and any of `JWT_SECRET`,
+`SERVICE_TOKEN` or `APP_DATABASE_URL` is missing, too short, still a
+placeholder, or — in the last case — pointed at the superuser role that
+bypasses row-level security.
+
+There is no secret manager yet. For a local stack and a synthetic demo, `.env`
+is the right weight; a deployment should inject these from its platform's
+secret store rather than from a file, and that is part of the Phase 5 work.
+
 ## Dependencies
 
-`pnpm audit` and `pip-audit` are not yet wired into CI — Phase 6. Python
-dependencies are also unpinned (no lockfile), which is tracked as debt.
+CI runs a `gitleaks` scan over the repository. `pnpm audit` and `pip-audit` are
+not yet wired in — Phase 6. Python dependencies are also unpinned (no
+lockfile), which is tracked as debt.

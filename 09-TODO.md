@@ -126,7 +126,7 @@ the auth that Phase 2 owns anyway.
 - [ ] Org switcher, search box (⌘K), notifications bell — chrome with no backing
 - [ ] Sidebar persona "Priya Nair" — labelled `Admin · demo`; real once auth lands
 
-## Phase 2 — Multi-tenancy, RBAC & Audit
+## Phase 2 — Multi-tenancy, RBAC & Audit ✅ **COMPLETE** (closed out 2026-08-11)
 - [x] Add `tenant_id` to all tenant-scoped tables
 - [x] Postgres RLS policies + tenant-context middleware (ADR-005) — on a
       `NOSUPERUSER NOBYPASSRLS` role, because superusers bypass RLS silently;
@@ -138,16 +138,28 @@ the auth that Phase 2 owns anyway.
 - [x] NestJS RBAC guards + policy decorators — one global guard, closed by
       default: a new controller is protected until it opts out
 - [x] RBAC-gated navigation in the SPA
-- [~] Append-only `audit_log` — enforced by trigger, not convention. Writes on
-      auth, task lifecycle and every FHIR access. Not yet on agent tool calls
-      individually; the trace already records those
+- [x] Append-only `audit_log` — enforced by trigger, not convention: the
+      database refuses UPDATE and DELETE, and TRUNCATE is not granted because
+      it would skip the trigger. Writes on auth, task lifecycle and every FHIR
+      access. Individual agent tool calls stay in `traces`, the record built
+      for them
 - [x] Audit Log UI: filter (actor/resource/action), export CSV — the export is
       itself audited
-- [ ] TLS locally; secrets via env/secret manager; document posture
-- [~] Test: cross-tenant access is blocked by RLS — verified by hand against
-      real Postgres (7 checks, all passing) and through the API. Not yet
-      automated in CI; belongs in the compose smoke job
-- [ ] ✅ Gate: roles + tenants + audit all working
+- [x] Secrets via env; posture documented in `SECURITY.md`. Production refuses
+      to boot on placeholder secrets, or on an `APP_DATABASE_URL` that bypasses
+      RLS; CI runs a gitleaks scan.
+      TLS is **deferred to Phase 5, deliberately** — a self-signed certificate
+      on loopback buys a browser warning and no security, and the real
+      transport boundary is the deployment edge
+- [x] Test: cross-tenant access is blocked by RLS — 14 integration tests
+      against a real database as the unprivileged role, run in the CI compose
+      job. CI then re-runs them with RLS deliberately bypassed and **fails if
+      they still pass**, because a test that cannot fail is worth nothing
+- [x] ✅ Gate: roles + tenants + audit all working — **met 2026-08-11.** Each
+      of the four roles exercised live: viewer reads but cannot create (403) or
+      open the audit log (403), coordinator creates (201), admin sees both. The
+      clinician switches between two clinics, role changes clinician to admin,
+      and the two tenants' task lists have zero overlap
 
 ## Phase 2.5 — SaaS Commercial Layer (see `11-SAAS-PRODUCTIZATION.md`)
 - [ ] Rename tenant → **org** model; self-serve signup → create org (Owner)
