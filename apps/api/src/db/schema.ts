@@ -49,6 +49,17 @@ export const taskStatus = pgEnum("task_status", [
   "escalated",
   "failed",
 ]);
+/**
+ * Where a follow-up message got to.
+ *
+ * `drafted` is the honest terminal state today: the agent composes an approved
+ * template and records it, and nothing delivers it. Delivery is a channel
+ * integration (n8n, then SMS) that does not exist yet, so the other two values
+ * are reserved rather than reachable — better than pretending `sent` when
+ * nothing was.
+ */
+export const messageStatus = pgEnum("message_status", ["drafted", "sent", "failed"]);
+
 export const traceKind = pgEnum("trace_kind", [
   "reason",
   "reflection",
@@ -159,6 +170,41 @@ export const auditLog = pgTable(
     index("audit_log_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
     index("audit_log_actor_idx").on(table.actorId),
     index("audit_log_resource_idx").on(table.resourceType, table.resourceId),
+  ],
+);
+
+/**
+ * Outbound patient contact.
+ *
+ * A record rather than a log line, for the same reason `audit_log` is: "did we
+ * contact this patient, when, and with what words" is a question a clinic has
+ * to be able to answer, and a trace step is an engineering artefact rather
+ * than a clinical one.
+ *
+ * `body` is stored rendered. The template id says which approved wording was
+ * used, but templates change, and what was actually sent is the thing that
+ * matters six months later.
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** The run that produced it, so a message traces back to its reasoning. */
+    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    /** FHIR Patient id. Not a foreign key — the patient lives in the EHR. */
+    patientRef: text("patient_ref").notNull(),
+    appointmentRef: text("appointment_ref"),
+    templateId: text("template_id").notNull(),
+    body: text("body").notNull(),
+    status: messageStatus("status").notNull().default("drafted"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("messages_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
+    index("messages_patient_idx").on(table.tenantId, table.patientRef),
   ],
 );
 
@@ -316,6 +362,9 @@ export const llmUsageRelations = relations(llmUsage, ({ one }) => ({
   task: one(tasks, { fields: [llmUsage.taskId], references: [tasks.id] }),
 }));
 
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;
+
 export type Tenant = typeof tenants.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
@@ -346,4 +395,5 @@ export const TENANT_SCOPED_TABLES = [
   "llm_usage",
   "memberships",
   "audit_log",
+  "messages",
 ] as const;

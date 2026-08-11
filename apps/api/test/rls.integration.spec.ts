@@ -1,6 +1,7 @@
 import { Client } from "pg";
 
 import { appDatabaseUrl, databaseUrl } from "../src/db/client";
+import { TENANT_SCOPED_TABLES } from "../src/db/schema";
 import { DEMO_TENANT_ID, SECOND_TENANT_ID } from "../src/common/tenant";
 
 // The .env is loaded by `test/load-env.cjs` via globalSetup, not here — jest
@@ -107,13 +108,26 @@ describe("the connection RLS is enforced against", () => {
 });
 
 describe("tenant isolation", () => {
-  it("shows nothing at all with no tenant in scope", async () => {
+  // Driven off the schema's own list rather than a hand-written one. Adding a
+  // tenant-scoped table now *requires* RLS on it: drizzle-kit generates table
+  // DDL and knows nothing about policies, so a new table is enrolled by hand
+  // or not at all — and "or not at all" has no other symptom.
+  it.each([...TENANT_SCOPED_TABLES])("%s has row-level security forced on", async (table) => {
+    const { rows } = await app.query<{ enabled: boolean; forced: boolean }>(
+      `select relrowsecurity as enabled, relforcerowsecurity as forced
+         from pg_class where relname = $1`,
+      [table],
+    );
+
+    expect(rows[0]?.enabled).toBe(true);
+    // ENABLE alone exempts the table owner, which is the role that migrates.
+    expect(rows[0]?.forced).toBe(true);
+  });
+
+  it.each([...TENANT_SCOPED_TABLES])("%s shows nothing with no tenant in scope", async (table) => {
     // Fails closed. A query that forgets `withTenant` sees zero rows rather
     // than every tenant's.
-    expect(await count(app, "select count(*) as n from agents")).toBe(0);
-    expect(await count(app, "select count(*) as n from tasks")).toBe(0);
-    expect(await count(app, "select count(*) as n from traces")).toBe(0);
-    expect(await count(app, "select count(*) as n from audit_log")).toBe(0);
+    expect(await count(app, `select count(*) as n from "${table}"`)).toBe(0);
   });
 
   it("shows one tenant's rows when scoped to it", async () => {

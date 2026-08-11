@@ -36,6 +36,13 @@
       "when": 1786448731603,
       "tag": "0004_reflection_trace_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786459843538,
+      "tag": "0005_messages",
+      "breakpoints": true
     }
   ]
 }
