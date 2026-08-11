@@ -10,6 +10,8 @@ import type {
   Slot,
 } from "@clinicpilot/fhir-client";
 
+import { fhirBaseUrl } from "./config";
+
 const ROOT_ENV = "../../.env";
 if (existsSync(ROOT_ENV)) process.loadEnvFile(ROOT_ENV);
 
@@ -25,8 +27,6 @@ if (existsSync(ROOT_ENV)) process.loadEnvFile(ROOT_ENV);
  * Synthetic data only. Nothing here is or resembles real PHI.
  */
 export const SEED_SYSTEM = "https://clinicpilot.dev/fhir/seed";
-
-const FHIR_BASE_URL = process.env.FHIR_BASE_URL ?? "https://hapi.fhir.org/baseR4";
 
 const THURSDAY = 4;
 const TUESDAY = 2;
@@ -111,7 +111,7 @@ async function refresh<T extends FhirResource>(
   return updated;
 }
 
-export async function seedHapi(client = new FhirClient({ baseUrl: FHIR_BASE_URL })) {
+export async function seedHapi(client = new FhirClient({ baseUrl: fhirBaseUrl() })) {
   const now = new Date();
 
   const practitioner = await upsert<Practitioner>(client, "Practitioner", "dr-chen", () => ({
@@ -198,7 +198,7 @@ export async function seedHapi(client = new FhirClient({ baseUrl: FHIR_BASE_URL 
 }
 
 if (require.main === module) {
-  console.log(`seeding ${FHIR_BASE_URL}\n`);
+  console.log(`seeding ${fhirBaseUrl()}\n`);
   seedHapi()
     .then((seeded) => {
       console.log("\nscenario ready:");
