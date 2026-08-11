@@ -5,7 +5,6 @@ import {
   HttpException,
   Inject,
   Injectable,
-  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { FhirClient, FhirConflictError, FhirError } from "@clinicpilot/fhir-client";
@@ -18,7 +17,7 @@ import type {
   SlotSummary,
 } from "@clinicpilot/shared-types";
 
-import { currentTenantId } from "../common/tenant";
+import { AuditService } from "../audit/audit.service";
 import { SEED_IDENTIFIERS, SEED_SYSTEM } from "./config";
 
 /** DI token, so tests can inject a stub client without a live sandbox. */
@@ -37,12 +36,13 @@ export const FHIR_CLIENT = Symbol("FHIR_CLIENT");
  */
 @Injectable()
 export class FhirService {
-  private readonly logger = new Logger(FhirService.name);
-
-  constructor(@Inject(FHIR_CLIENT) private readonly fhir: FhirClient) {}
+  constructor(
+    @Inject(FHIR_CLIENT) private readonly fhir: FhirClient,
+    private readonly audit: AuditService,
+  ) {}
 
   async findAppointments(query: FindAppointmentsQuery): Promise<AppointmentSummary[]> {
-    this.audit("read", `Appointment?patient=${query.patientId}`);
+    this.track("read", `Appointment?patient=${query.patientId}`);
 
     const appointments = await this.call(() =>
       this.fhir.findAppointments({
@@ -56,7 +56,7 @@ export class FhirService {
   }
 
   async findFreeSlots(query: FindFreeSlotsQuery): Promise<SlotSummary[]> {
-    this.audit("read", `Slot?schedule=${query.scheduleId}&status=free`);
+    this.track("read", `Slot?schedule=${query.scheduleId}&status=free`);
 
     const slots = await this.call(() =>
       this.fhir.findFreeSlots({
@@ -77,7 +77,7 @@ export class FhirService {
    * conflict rather than as a silent overwrite of someone else's booking.
    */
   async reschedule(input: RescheduleAppointmentInput): Promise<AppointmentSummary> {
-    this.audit("write", `Appointment/${input.appointmentId} -> ${input.start}`);
+    this.track("write", `Appointment/${input.appointmentId} -> ${input.start}`);
 
     const updated = await this.call(() =>
       this.fhir.rescheduleAppointment({
@@ -130,12 +130,21 @@ export class FhirService {
   /**
    * Every PHI touch, in one place — which is half the point of ADR-008.
    *
-   * A log line is not an audit trail. Phase 2 turns this into an `audit_log`
-   * row with the actor once auth exists to say who the actor is; until then the
-   * call site is at least instrumented rather than invisible.
+   * Now a row in `audit_log` rather than a log line, which is what HIPAA's
+   * audit-control safeguard actually asks for. Fire-and-forget: an audit write
+   * failing must not abort a reschedule that is otherwise working, and
+   * `AuditService.record` never throws.
+   *
+   * Callers on the `internal/` surface have no user, so these land as `system`
+   * — a machine's FHIR read is not attributable to whoever submitted the task,
+   * and saying otherwise would invent a fact about a person.
    */
-  private audit(access: "read" | "write", target: string): void {
-    this.logger.log(`fhir ${access} tenant=${currentTenantId()} ${target}`);
+  private track(access: "read" | "write", target: string): void {
+    void this.audit.recordSystem({
+      action: `fhir.${access}`,
+      resourceType: "fhir",
+      resourceId: target,
+    });
   }
 
   private async call<T>(operation: () => Promise<T>): Promise<T> {

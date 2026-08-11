@@ -40,12 +40,12 @@ const RUN_TIMEOUT_MS = Number(process.env.WORKER_RUN_TIMEOUT_MS ?? 300_000);
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 1);
 
 async function runTask(job: Job<RunTaskJob>): Promise<void> {
-  const { taskId, input, agentKind } = job.data;
+  const { taskId, tenantId, input, agentKind } = job.data;
 
   const response = await fetch(`${AI_SERVICE_URL}/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskId, input, agentKind }),
+    body: JSON.stringify({ taskId, tenantId, input, agentKind }),
     signal: AbortSignal.timeout(RUN_TIMEOUT_MS),
   });
 

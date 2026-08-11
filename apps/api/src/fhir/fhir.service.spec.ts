@@ -15,7 +15,17 @@ Logger.overrideLogger(false);
 
 type ClientStub = Partial<Record<keyof FhirClient, jest.Mock>>;
 
-const service = (stub: ClientStub) => new FhirService(stub as unknown as FhirClient);
+/**
+ * Audit writes are fire-and-forget and never throw, so a no-op stub is enough
+ * here — `audit.spec.ts` covers that they happen and what they contain.
+ */
+const auditStub = () => ({ record: jest.fn(), recordSystem: jest.fn() });
+
+const service = (stub: ClientStub) =>
+  new FhirService(
+    stub as unknown as FhirClient,
+    auditStub() as unknown as ConstructorParameters<typeof FhirService>[1],
+  );
 
 const appointment = (over: Partial<Appointment> = {}): Appointment => ({
   resourceType: "Appointment",

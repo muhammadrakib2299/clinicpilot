@@ -12,6 +12,12 @@ export const RUN_TASK_JOB = "run-task";
 
 export interface RunTaskJob {
   taskId: string;
+  /**
+   * Carried on the job because the run happens with no user in the request.
+   * The AI service passes it back on every callback, and the gateway scopes
+   * RLS to it — so it is a claim that grants nothing, not a bypass.
+   */
+  tenantId: string;
   input: string;
   agentKind: string;
 }

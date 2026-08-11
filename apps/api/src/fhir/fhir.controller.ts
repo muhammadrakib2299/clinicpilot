@@ -5,6 +5,7 @@ import {
   RescheduleAppointmentInput,
 } from "@clinicpilot/shared-types";
 
+import { ServiceOnly } from "../auth/auth.decorators";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { FhirService } from "./fhir.service";
 
@@ -13,10 +14,11 @@ import { FhirService } from "./fhir.service";
  *
  * Mounted under `internal/` alongside the task callbacks, for the same reason:
  * it must not be reachable from the public internet. It reads and writes
- * patient data with no user in the request at all, so the service token that
- * Phase 2 puts in front of `internal/` matters more here than anywhere else in
- * the gateway.
+ * patient data with no user in the request at all, which is why the service
+ * token matters more here than anywhere else in the gateway — it is the only
+ * thing in front of it.
  */
+@ServiceOnly()
 @Controller("internal/fhir")
 export class InternalFhirController {
   constructor(private readonly fhir: FhirService) {}

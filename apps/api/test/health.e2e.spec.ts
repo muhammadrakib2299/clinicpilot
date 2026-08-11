@@ -16,6 +16,11 @@ describe("Health (e2e)", () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    // AuthModule refuses to construct without one, deliberately — a generated
+    // fallback would work until the second replica started. CI has no .env, so
+    // the suite supplies its own.
+    process.env["JWT_SECRET"] ??= "test-secret-not-used-anywhere-real";
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -43,13 +48,42 @@ describe("Health (e2e)", () => {
     expect(typeof res.body.ts).toBe("string");
   });
 
-  it("agrees with itself about the database", async () => {
+  it("agrees with itself about its dependencies", async () => {
     const res = await request(app.getHttpServer()).get("/api/health").expect(200);
 
-    // `ok` must never be reported alongside a down dependency — that is the
-    // failure mode a health check exists to prevent.
-    const expected = res.body.dependencies.database === "up" ? "ok" : "degraded";
-    expect(res.body.status).toBe(expected);
+    // `ok` must never be reported alongside a degraded dependency — that is
+    // the failure mode a health check exists to prevent. Both dependencies
+    // count: a reachable database that is not enforcing tenant isolation is
+    // not a healthy gateway.
+    const healthy =
+      res.body.dependencies.database === "up" &&
+      res.body.dependencies.tenantIsolation === "enforced";
+
+    expect(res.body.status).toBe(healthy ? "ok" : "degraded");
+  });
+
+  it("reports whether tenant isolation is actually being enforced", async () => {
+    const res = await request(app.getHttpServer()).get("/api/health").expect(200);
+
+    expect(["enforced", "BYPASSED"]).toContain(res.body.dependencies.tenantIsolation);
+  });
+
+  it("is reachable without a session, unlike everything else", async () => {
+    // The global auth guard closes every route by default; health has to opt
+    // out or the compose healthcheck can never pass.
+    await request(app.getHttpServer()).get("/api/health").expect(200);
+  });
+
+  it("refuses an unauthenticated request to a protected route", async () => {
+    // The other half of that: proves the guard is actually mounted, so the
+    // test above is testing an opt-out rather than an absence.
+    await request(app.getHttpServer()).get("/api/tasks").expect(401);
+  });
+
+  it("refuses an internal route with no service token", async () => {
+    await request(app.getHttpServer())
+      .post("/api/internal/tasks/00000000-0000-4000-8000-000000000009/running")
+      .expect(401);
   });
 
   it("serves nothing at the unprefixed path", async () => {
