@@ -26,12 +26,15 @@
     "up:infra": "docker compose -f infra/docker-compose.yml --env-file .env up -d --wait postgres redis n8n",
     "up:all": "docker compose -f infra/docker-compose.yml --env-file .env up -d --build --wait",
     "down": "docker compose -f infra/docker-compose.yml --env-file .env down",
-    "logs": "docker compose -f infra/docker-compose.yml --env-file .env logs -f"
+    "logs": "docker compose -f infra/docker-compose.yml --env-file .env logs -f",
+    "test:integration": "pnpm --filter @clinicpilot/api test:integration"
   },
   "devDependencies": {
     "turbo": "^2.3.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

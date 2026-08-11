@@ -22,7 +22,15 @@ export default [
   {
     // Seed and config scripts are CLIs run by a human. `console` is their user
     // interface, not leftover debugging, so the service-wide ban does not apply.
-    files: ["src/db/seed.ts", "src/fhir/seed-hapi.ts", "drizzle.config.ts"],
+    files: ["src/db/seed.ts", "src/fhir/seed-hapi.ts", "src/db/setup-rls.ts", "drizzle.config.ts"],
     rules: { "no-console": "off" },
+  },
+  {
+    // Genuinely CommonJS, and required to be: jest loads `globalSetup` before
+    // any transform exists, so it cannot be TypeScript or ESM. `require` is the
+    // only thing that works there.
+    files: ["**/*.cjs"],
+    languageOptions: { sourceType: "commonjs" },
+    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
 ];

@@ -2,7 +2,7 @@
   "name": "@clinicpilot/api",
   "version": "0.1.0",
   "private": true,
-  "description": "ClinicPilot API gateway — auth, tenancy, RBAC, orchestration entrypoint, audit, realtime.",
+  "description": "ClinicPilot API gateway \u2014 auth, tenancy, RBAC, orchestration entrypoint, audit, realtime.",
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
@@ -19,7 +19,8 @@
     "db:rls": "tsx src/db/setup-rls.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "fhir:seed": "tsx src/fhir/seed-hapi.ts"
+    "fhir:seed": "tsx src/fhir/seed-hapi.ts",
+    "test:integration": "jest -c jest.integration.config.cjs"
   },
   "dependencies": {
     "@clinicpilot/fhir-client": "workspace:*",
@@ -80,6 +81,10 @@
       "!src/main.ts"
     ],
     "coverageDirectory": "coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "\\.integration\\.spec\\.ts$"
+    ]
   }
 }
