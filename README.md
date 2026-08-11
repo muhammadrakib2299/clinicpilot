@@ -63,7 +63,7 @@ The three flagship agents:
 - **Live demo:** _TODO — deploy to Vercel (frontend) + Fly.io/Render (API + n8n) and paste URL here_
 - **Demo login:** _TODO — seeded `admin@demo.clinicpilot.io` / read-only `viewer@demo.clinicpilot.io`_
 - **Walkthrough video (2 min):** _TODO — Loom link_
-- **Architecture diagram:** see [`06-ARCHITECTURE-SCALABILITY.md`](./06-ARCHITECTURE-SCALABILITY.md)
+- **Architecture diagram:** [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.md) — request path, task lifecycle, deployment topology
 
 > Demo uses **synthetic data only** against the public HAPI FHIR sandbox. No real PHI is ever processed.
 
@@ -221,7 +221,10 @@ pnpm down          # stop the stack
 | 09 | [`09-TODO.md`](./09-TODO.md) | Granular execution checklist |
 | 10 | [`10-LESSONS.md`](./10-LESSONS.md) | Skills to learn + lessons-learned log |
 | 11 | [`11-SAAS-PRODUCTIZATION.md`](./11-SAAS-PRODUCTIZATION.md) | Commercial SaaS layer: plans, billing, quotas, metering, scale |
-| — | [`docs/adr/`](./docs/adr/) | Architecture Decision Records (001, 002, 004, 008 accepted) |
+| — | [`docs/adr/`](./docs/adr/) | Architecture Decision Records (001, 002, 004, 007, 008 accepted) |
+| — | [`docs/diagrams/`](./docs/diagrams/architecture.md) | Request path, task lifecycle, deployment topology (mermaid) |
+| — | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Setup, the verify commands, commit and ADR conventions |
+| — | [`SECURITY.md`](./SECURITY.md) | Posture, reporting, and an honest list of known gaps |
 
 ---
 
@@ -297,3 +300,9 @@ Full rationale in [`05-TECH-STACK.md`](./05-TECH-STACK.md).
 ## Disclaimer
 
 ClinicPilot is a **portfolio / demonstration project**. It is **not** a certified medical device and is **not** deployed against real patient data. All HIPAA references describe design intent and engineering practices, not a certification.
+
+[`SECURITY.md`](./SECURITY.md) lists the known gaps explicitly — no auth, no
+row-level security, no PHI redaction yet — because a project that talks about
+HIPAA safeguards owes the reader a straight answer about which ones exist.
+
+Licensed under the [MIT License](./LICENSE).

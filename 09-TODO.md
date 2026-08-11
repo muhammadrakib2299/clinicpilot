@@ -5,7 +5,8 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
 ---
 
 ## Phase 0 — Foundations ✅ **COMPLETE** (closed out 2026-07-29)
-- [x] Create GitHub repo `clinicpilot` (MIT license, README stub)
+- [x] Create GitHub repo `clinicpilot` (MIT license, README stub) — the
+      LICENSE *file* was missing until 2026-08-11 while the badge claimed MIT
 - [x] Init pnpm workspace + Turborepo (`turbo.json`, `pnpm-workspace.yaml`)
 - [x] Scaffold `apps/web` (Vite + React 18 + TS + Tailwind v4) — ⚠️ hand-rolled
       primitives instead of shadcn/ui; revisit when the component surface grows
@@ -189,11 +190,15 @@ the auth that Phase 2 owns anyway.
 
 ## Phase 6 — Documentation, Tests & Hardening
 - [ ] Unit/integration tests → >70% on core services
-- [ ] Finalize ADR-001…006 in `/docs/adr`
-- [ ] Render architecture diagram (mermaid → PNG) into README
+- [~] Finalize ADRs in `/docs/adr` — 001, 002, 004, 007, 008 accepted.
+      003, 005 and 006 stay reserved until the work they describe is built
+- [x] Architecture diagram — `docs/diagrams/architecture.md`: request path,
+      task lifecycle and deployment topology, mermaid source rather than PNG so
+      a diff shows what changed about the system
 - [ ] README polish: 30-second clarity, badges, verified quickstart
 - [ ] Dependency audit; secrets scan; RLS + PHI-redaction tests
-- [ ] `CONTRIBUTING.md` + `SECURITY.md` + disclaimers
+- [x] `CONTRIBUTING.md` + `SECURITY.md` + disclaimers — SECURITY lists the
+      six known gaps by name rather than claiming a posture
 - [ ] ✅ Gate (B4): CI green; clone-and-run verified by a fresh clone
 
 ## Phase 7 — Launch & Apply
