@@ -18,7 +18,10 @@ from app.agents.scheduling import SCHEDULING_TOOLS, SYSTEM_PROMPT
 from app.agents.scheduling_executor import make_scheduling_executor
 from app.fhir.gateway import GatewayFhir
 from app.llm.anthropic_provider import AnthropicProvider
+from app.llm.fallback_provider import FallbackProvider
 from app.llm.provider import LlmProvider, ToolDefinition
+from app.llm.redacting_provider import RedactingProvider
+from app.safety.redaction import Redactor
 
 
 class UnknownAgentError(Exception):
@@ -64,6 +67,7 @@ def run_task(
     fhir: GatewayFhir | None = None,
     sink: GatewayTraceSink | None = None,
     priced_on: date | None = None,
+    redact: bool = True,
 ) -> AgentRun:
     """Run one task, reporting every step and its terminal state to the gateway.
 
@@ -80,6 +84,11 @@ def run_task(
 
     if provider is None:
         provider = _default_provider()
+
+    # Outermost, so a fallback to a second vendor cannot become a path that
+    # skips it (ADR-006). Off only for tests that assert on raw prompts.
+    if redact:
+        provider = RedactingProvider(provider, Redactor())
 
     owned_fhir = fhir is None
     fhir = fhir or GatewayFhir(tenant_id=tenant_id)
@@ -114,12 +123,28 @@ def run_task(
 
 
 def _default_provider() -> LlmProvider:
-    # Checked here rather than letting the SDK raise: compose starts this
-    # service without a key on purpose, so "no key" is a configuration state
-    # with a clear answer, not an unexpected exception.
+    """The primary model, with a cheaper one behind it (ADR-003).
+
+    Checked for a key here rather than letting the SDK raise: compose starts
+    this service without one on purpose, so "no key" is a configuration state
+    with a clear answer, not an unexpected exception.
+
+    The fallback is a second Anthropic model rather than a second vendor,
+    because that is what is configured and reachable — `FallbackProvider` takes
+    any `LlmProvider`, so an OpenAI implementation drops in without the loop or
+    the accounting changing. Falling back to a smaller model is also the more
+    common production case than falling back to a competitor.
+    """
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise ProviderUnavailableError(
             "ANTHROPIC_API_KEY is not set, so no model call can be made. "
             "Set it in .env and restart the AI service."
         )
-    return AnthropicProvider()
+
+    primary = AnthropicProvider()
+    fallback_model = os.environ.get("ANTHROPIC_MODEL_FAST")
+
+    if not fallback_model or fallback_model == primary.model:
+        return primary
+
+    return FallbackProvider([primary, AnthropicProvider(model=fallback_model)])
