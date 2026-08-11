@@ -2,6 +2,27 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { setToken } from "@/lib/session";
+
+const SESSION = {
+  id: "user-1",
+  email: "admin@demo.clinicpilot.io",
+  name: "Priya Nair",
+  tenantId: "00000000-0000-4000-8000-000000000001",
+  role: "admin",
+  memberships: [
+    {
+      tenantId: "00000000-0000-4000-8000-000000000001",
+      tenantName: "Northside Family Clinic",
+      role: "admin",
+    },
+    {
+      tenantId: "00000000-0000-4000-8000-000000000002",
+      tenantName: "Riverside Medical Group",
+      role: "clinician",
+    },
+  ],
+};
 
 /** Minimal WebSocket stand-in — jsdom has none. */
 class FakeWebSocket {
@@ -90,11 +111,18 @@ const OVERVIEW_RESPONSE = {
   activity: [],
 };
 
-/** Every endpoint the dashboard hits on mount. */
+/** Every endpoint the signed-in dashboard hits on mount. */
 const BASE_HANDLERS = {
+  "/api/auth/me": SESSION,
   "/api/overview": OVERVIEW_RESPONSE,
   "/api/agents": AGENTS_RESPONSE,
 };
+
+/** Renders and waits out the "verifying your stored token" gate. */
+async function renderSignedIn() {
+  render(<App />);
+  await waitFor(() => expect(screen.getByText("Priya Nair")).toBeInTheDocument());
+}
 
 function step(overrides: Record<string, unknown> = {}) {
   return {
@@ -127,9 +155,12 @@ function mockFetch(handlers: Record<string, unknown>) {
 beforeEach(() => {
   FakeWebSocket.instances = [];
   vi.stubGlobal("WebSocket", FakeWebSocket);
+  // A stored token, which the app verifies against /auth/me before rendering.
+  setToken("test-token");
 });
 
 afterEach(() => {
+  setToken(null);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -137,27 +168,114 @@ afterEach(() => {
 describe("app shell", () => {
   it("renders the fleet heading and agent cards from the API", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
-    render(<App />);
+    await renderSignedIn();
 
     expect(screen.getByRole("heading", { name: "Fleet Overview" })).toBeInTheDocument();
     // Agent cards come from GET /api/agents now, not from the fixture module.
     await waitFor(() => expect(screen.getByText("Scheduling Agent")).toBeInTheDocument());
   });
 
-  it("defaults to the dark theme and toggles it on <html>", () => {
+  it("defaults to the dark theme and toggles it on <html>", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
-    render(<App />);
+    await renderSignedIn();
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     fireEvent.click(screen.getByLabelText("Toggle theme"));
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
+
+  it("sends the session token on every request", async () => {
+    const fetchMock = mockFetch({ ...BASE_HANDLERS });
+    vi.stubGlobal("fetch", fetchMock);
+    await renderSignedIn();
+
+    for (const [, init] of fetchMock.mock.calls as unknown as [string, RequestInit?][]) {
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-token");
+    }
+  });
+});
+
+describe("signed out", () => {
+  it("shows the login screen and never mounts the dashboard", async () => {
+    setToken(null);
+    const fetchMock = mockFetch({ ...BASE_HANDLERS });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument(),
+    );
+    // Nothing behind the gate is mounted, so nothing can fire a request that
+    // 401s while the user looks at a half-rendered dashboard.
+    expect(screen.queryByRole("heading", { name: "Fleet Overview" })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("drops to the login screen when a stored token is rejected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as Response),
+    );
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("role-gated navigation", () => {
+  it("shows admin-only destinations to an admin", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
+    await renderSignedIn();
+
+    expect(screen.getByRole("link", { name: /Audit Log/ })).toBeInTheDocument();
+  });
+
+  it("hides them from a viewer", async () => {
+    // Hiding is not the enforcement — the API guard is. This stops the nav
+    // advertising a door that opens onto a 403.
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ ...BASE_HANDLERS, "/api/auth/me": { ...SESSION, role: "viewer" } }),
+    );
+    await renderSignedIn();
+
+    expect(screen.queryByRole("link", { name: /Audit Log/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Tasks/ })).toBeInTheDocument();
+  });
+});
+
+describe("tenant switcher", () => {
+  it("lists the organisations the user belongs to", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
+    await renderSignedIn();
+
+    fireEvent.click(screen.getByRole("button", { name: /Northside Family Clinic/ }));
+
+    expect(screen.getByRole("menuitem", { name: /Riverside Medical Group/ })).toBeInTheDocument();
+  });
+
+  it("does not offer a switch to someone who belongs to one clinic", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({
+        ...BASE_HANDLERS,
+        "/api/auth/me": { ...SESSION, memberships: [SESSION.memberships[0]] },
+      }),
+    );
+    await renderSignedIn();
+
+    expect(screen.getByRole("button", { name: /Northside Family Clinic/ })).toBeDisabled();
+  });
 });
 
 describe("trace drawer", () => {
-  it("stays closed until a task exists to watch", () => {
+  it("stays closed until a task exists to watch", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
-    render(<App />);
+    await renderSignedIn();
 
     expect(screen.queryByText(/Agent trace/i)).not.toBeInTheDocument();
     expect(FakeWebSocket.instances).toHaveLength(0);
@@ -167,7 +285,7 @@ describe("trace drawer", () => {
     const fetchMock = mockFetch({ ...BASE_HANDLERS, "/api/tasks": TASK });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => expect(screen.getByText(/Agent trace/i)).toBeInTheDocument());
@@ -186,7 +304,7 @@ describe("trace drawer", () => {
       "fetch",
       mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
     );
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
@@ -201,7 +319,7 @@ describe("trace drawer", () => {
 
   it("renders steps pushed over the socket, with tokens and cost", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
@@ -217,7 +335,7 @@ describe("trace drawer", () => {
 
   it("orders steps by stepNo regardless of arrival order", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const socket = FakeWebSocket.instances[0]!;
@@ -244,7 +362,7 @@ describe("trace drawer", () => {
       "fetch",
       mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [step()] }, "/api/tasks": TASK }),
     );
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const socket = FakeWebSocket.instances[0]!;
@@ -258,7 +376,7 @@ describe("trace drawer", () => {
 
   it("reflects a terminal status pushed over the socket", async () => {
     vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }));
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const socket = FakeWebSocket.instances[0]!;
@@ -280,7 +398,7 @@ describe("trace drawer", () => {
       "fetch",
       mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
     );
-    render(<App />);
+    await renderSignedIn();
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
     const socket = FakeWebSocket.instances[0]!;

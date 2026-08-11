@@ -11,22 +11,47 @@ import {
   Workflow,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
+import type { UserRole } from "@clinicpilot/shared-types/roles";
 
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 
-const NAV = [
+/**
+ * `minRole` hides a destination the API would refuse anyway.
+ *
+ * Hiding is not the enforcement — the guard on the server is. This exists so
+ * the nav does not advertise a door that opens onto a 403, which is the same
+ * reason the unbuilt screens render an honest "not built yet" page rather than
+ * being silently absent.
+ */
+const NAV: Array<{
+  icon: typeof LayoutDashboard;
+  label: string;
+  to: string;
+  minRole?: UserRole;
+}> = [
   { icon: LayoutDashboard, label: "Dashboard", to: "/" },
   { icon: Bot, label: "Agents", to: "/agents" },
   { icon: Inbox, label: "Tasks", to: "/tasks" },
   { icon: Workflow, label: "Workflows", to: "/workflows" },
   { icon: Database, label: "FHIR Explorer", to: "/fhir" },
   { icon: BarChart3, label: "Analytics", to: "/analytics" },
-  { icon: ScrollText, label: "Audit Log", to: "/audit" },
-  { icon: CreditCard, label: "Billing", to: "/billing" },
-  { icon: Settings, label: "Settings", to: "/settings" },
+  { icon: ScrollText, label: "Audit Log", to: "/audit", minRole: "admin" },
+  { icon: CreditCard, label: "Billing", to: "/billing", minRole: "admin" },
+  { icon: Settings, label: "Settings", to: "/settings", minRole: "admin" },
 ];
 
+const INITIALS = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+
 export function Sidebar({ openTaskCount }: { openTaskCount?: number }) {
+  const { user, can } = useAuth();
+  const visible = NAV.filter((item) => !item.minRole || can(item.minRole));
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface-1">
       <div className="flex h-14 items-center gap-2 border-b border-border px-4">
@@ -37,7 +62,7 @@ export function Sidebar({ openTaskCount }: { openTaskCount?: number }) {
       </div>
 
       <nav className="flex-1 space-y-0.5 p-2">
-        {NAV.map((item) => (
+        {visible.map((item) => (
           <NavLink
             key={item.label}
             to={item.to}
@@ -65,12 +90,12 @@ export function Sidebar({ openTaskCount }: { openTaskCount?: number }) {
       <div className="border-t border-border p-3">
         <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-2">
           <div className="flex size-7 items-center justify-center rounded-full border border-border-strong bg-surface-1 text-xs font-semibold">
-            P
+            {user ? INITIALS(user.name) : "?"}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium">Priya Nair</div>
-            {/* No auth yet — this is the seeded demo persona, not a session. */}
-            <div className="truncate text-[11px] text-muted">Admin · demo</div>
+            {/* A real session now, not the seeded persona this used to hardcode. */}
+            <div className="truncate text-xs font-medium">{user?.name ?? "Not signed in"}</div>
+            <div className="truncate text-[11px] capitalize text-muted">{user?.role}</div>
           </div>
         </div>
       </div>

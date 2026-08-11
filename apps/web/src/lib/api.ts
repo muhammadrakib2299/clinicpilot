@@ -1,6 +1,16 @@
+import type {
+  AuditQueryInput,
+  SessionUser,
+  UserRole,
+} from "@clinicpilot/shared-types";
+
 import type { AgentKind, TraceKind } from "@/data/mock";
+import { clearToken, getToken } from "@/lib/session";
 
 const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8080";
+
+/** Fired on any 401 so the app can drop to the login screen from anywhere. */
+export const SESSION_EXPIRED = "clinicpilot:session-expired";
 
 export interface Task {
   id: string;
@@ -29,17 +39,128 @@ export interface LiveTraceStep {
   createdAt: string;
 }
 
+/**
+ * One place that attaches the session and one place that notices it has gone.
+ *
+ * Every call routes through here. A 401 clears the token and announces it, so
+ * an expired session drops to the login screen from whichever screen happened
+ * to notice — rather than each caller rendering its own "could not reach the
+ * API" and leaving the user stuck on a page that will never load.
+ */
+async function request(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = getToken();
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new CustomEvent(SESSION_EXPIRED));
+  }
+
+  return res;
+}
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(body?.message ?? `${res.status} ${res.statusText}`);
+    const body = (await res.json().catch(() => null)) as
+      | { message?: string; issues?: Array<{ message: string }> }
+      | null;
+
+    // Field-level detail when the gateway sent it; the bare status is the
+    // least useful thing we could show.
+    const detail = body?.issues?.map((issue) => issue.message).join("; ");
+    throw new Error(detail || body?.message || `${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;
 }
 
+// ── Session ─────────────────────────────────────────────────────────────────
+
+export interface LoginResult {
+  token: string;
+  user: SessionUser;
+}
+
+export async function login(email: string, password: string) {
+  return json<LoginResult>(
+    await request("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }),
+  );
+}
+
+export async function fetchMe() {
+  return json<SessionUser>(await request("/api/auth/me"));
+}
+
+export async function switchTenant(tenantId: string) {
+  return json<LoginResult>(
+    await request("/api/auth/switch-tenant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenantId }),
+    }),
+  );
+}
+
+export async function logout() {
+  // Best-effort: the token is stateless, so the client discarding it is what
+  // actually ends the session. This is for the audit entry.
+  await request("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+}
+
+// ── Audit ───────────────────────────────────────────────────────────────────
+
+export interface AuditEntry {
+  id: string;
+  actorEmail: string | null;
+  actorName: string | null;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  metadata: Record<string, unknown> | null;
+  ip: string | null;
+  createdAt: string;
+}
+
+function auditParams(filters: AuditQueryInput): string {
+  const params = new URLSearchParams();
+  if (filters.actor) params.set("actor", filters.actor);
+  if (filters.action) params.set("action", filters.action);
+  if (filters.resourceType) params.set("resourceType", filters.resourceType);
+  return params.toString();
+}
+
+export async function listAudit(filters: AuditQueryInput = {}) {
+  return json<AuditEntry[]>(await request(`/api/audit?${auditParams(filters)}`));
+}
+
+/**
+ * Downloads rather than returning the CSV, because the export is streamed
+ * straight to a file — and because doing it through `request` keeps the
+ * Authorization header on it, which a plain `<a href>` could not.
+ */
+export async function downloadAuditCsv(filters: AuditQueryInput = {}): Promise<void> {
+  const res = await request(`/api/audit/export.csv?${auditParams(filters)}`);
+  if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "clinicpilot-audit.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+export type { SessionUser, UserRole };
+
 export async function createTask(input: string, agentKind: AgentKind = "scheduling") {
   return json<Task>(
-    await fetch(`${API_URL}/api/tasks`, {
+    await request("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ agentKind, input }),
@@ -48,11 +169,11 @@ export async function createTask(input: string, agentKind: AgentKind = "scheduli
 }
 
 export async function getTask(id: string) {
-  return json<{ task: Task; steps: LiveTraceStep[] }>(await fetch(`${API_URL}/api/tasks/${id}`));
+  return json<{ task: Task; steps: LiveTraceStep[] }>(await request(`/api/tasks/${id}`));
 }
 
 export async function listTasks() {
-  return json<Task[]>(await fetch(`${API_URL}/api/tasks`));
+  return json<Task[]>(await request("/api/tasks"));
 }
 
 /** ws:// or wss:// depending on how the API itself is served. */
@@ -100,11 +221,11 @@ export interface ActivityItem {
 }
 
 export async function listAgents() {
-  return json<AgentSummary[]>(await fetch(`${API_URL}/api/agents`));
+  return json<AgentSummary[]>(await request("/api/agents"));
 }
 
 export async function getOverview() {
   return json<{ kpis: OverviewKpis; activity: ActivityItem[] }>(
-    await fetch(`${API_URL}/api/overview`),
+    await request("/api/overview"),
   );
 }
