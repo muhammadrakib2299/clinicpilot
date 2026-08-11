@@ -54,14 +54,20 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
 - [ ] `FhirClient` sets no HTTP timeout. A hanging HAPI hangs the gateway
       request — the sandbox returned `fetch failed` once mid-session and took
       7.8s on a plain read shortly after
+- [ ] The enqueue happens just after the task commits, not inside it. A Redis
+      outage in that window leaves a task nothing will pick up (the response
+      says so via `queued: false`, and the CLI can drive it). The fix is an
+      outbox: write the job to Postgres in the same transaction and relay it
 - [ ] No reconnect/backoff on the Trace Viewer WebSocket — a dropped socket
       shows `closed` until the drawer is reopened
 
-## Phase 1 — Vertical Slice: Scheduling Agent ⭐ **~70% — agent works end to end**
+## Phase 1 — Vertical Slice: Scheduling Agent ⭐ **~90% — the loop is closed**
 
 Sequenced **agent-spine-first**: auth, queue and n8n were deliberately deferred so
-a demoable artefact existed sooner. The agent reschedules a real appointment on a
-real FHIR server today; what remains is the plumbing around it.
+a demoable artefact existed sooner. As of 2026-08-11 a message typed into the
+dashboard is queued, picked up by a worker, run by the agent against a real FHIR
+server, and streamed back step by step. What is left in this phase is n8n and
+the auth that Phase 2 owns anyway.
 
 ### Auth & data
 - [x] DB migrations: `tenants`, `agents`, `tasks`, `traces`, `llm_usage`
@@ -87,9 +93,12 @@ real FHIR server today; what remains is the plumbing around it.
 ### Automation & queue
 - [ ] n8n "reschedule appointment" workflow (read slot → write appt → confirm)
 - [ ] Expose n8n webhook; call it from an AI-service tool
-- [ ] BullMQ producer (API) + worker (consumes → AI service) — **the last gap**:
-      a created task sits `queued` until `python -m app.agents.demo <task-id>`
-      is run against it by hand
+- [x] BullMQ producer (API) + worker (consumes → AI service) — **the loop is
+      closed.** Producer enqueues on task creation with `jobId = taskId` so a
+      double submit cannot double-run; the worker is its own process
+      (`--scale worker=3`); retries only failures where the run demonstrably
+      never started; and `markRunning` is a claim, so exactly one run can hold
+      a task no matter how many times a job is delivered
 - [x] AI service HTTP surface (`POST /run`) — drives the loop and reports the
       outcome synchronously, so a queue worker can retry on the answer.
       A failed run is recorded `failed`, never left `running`

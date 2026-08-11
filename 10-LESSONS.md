@@ -170,6 +170,58 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-08-11 — Closing the loop, and what at-least-once actually costs
+- Phase: 1
+- Context: BullMQ producer and worker. The end of a session that took the
+  project from "the agent works if you run a script" to "type a message and it
+  runs".
+- **The design question was not the queue, it was the retry.** BullMQ takes
+  five minutes to wire up. The real work was deciding what a retry *means* for
+  an agent run, because every replay is a live Claude conversation being billed
+  and possibly a second write to a patient's calendar.
+  - Retry only where the run demonstrably never started. The AI service checks
+    its provider *before* it claims the task, which is what makes its 503 safe
+    to replay. 400 fails straight to the dead-letter list — it will be just as
+    wrong on the third attempt.
+  - 502 is the honest edge. The run may have got part way, and replaying it may
+    re-spend the tokens it already spent. It is retryable anyway, because a
+    transient model timeout is the likeliest failure here and refusing to retry
+    would strand real work. That is the at-least-once trade, stated rather than
+    hidden.
+- **A queue makes duplicate delivery your problem, so the claim is the
+  interesting part.** A worker whose connection drops mid-run will retry, and
+  it has no way to know the first attempt is still going. So `markRunning`
+  stopped being a status update and became a claim: allowed from `queued` or
+  `failed`, refused from `running`, `resolved` or `escalated`. The refusal is
+  guarded in the `UPDATE` as well as checked before it — two workers can both
+  pass the read before either writes, and Postgres serialising the row is what
+  decides. On the Python side the matching change is that `mark_running` is now
+  the one call in the trace sink where failure is fatal: everything else there
+  degrades observability, this one means someone else owns the work.
+  - `jobId = taskId` on top of that, so BullMQ refuses a duplicate outright and
+    the claim only has to catch what gets past it.
+- **`console.log` was the wrong reflex.** The worker is plain Node — no Nest
+  app, nothing to inject — so I logged with `console` and picked up three lint
+  warnings. Reaching for Nest's `Logger` standalone was better than disabling
+  the rule: the worker and the gateway land in the same `pnpm logs` stream, and
+  two log formats in one stream is a needless thing to read past.
+- **Verified the success path with a stub, because the real one could not
+  reach it.** The Anthropic key returns 401, so no real run can succeed right
+  now. Rather than declare the worker's happy path "probably fine", I pointed
+  it at a fifteen-line stub returning a success payload and watched a task go
+  enqueue → dequeue → HTTP → job completed and removed from the queue. The
+  branch has now executed at least once.
+- What I'd do differently: write the claim before the queue, not after. I
+  built the producer and worker first and then realised the whole retry story
+  was unsound without it — the guard is what makes the retry policy safe to
+  choose at all, so it was the real dependency.
+- Interview soundbite: *"Adding the queue was five minutes; deciding what a
+  retry means took the rest. Every replay is a billed model conversation and
+  maybe a second write to a patient's calendar, so I made marking a task
+  running into a claim — allowed from queued or failed, refused from running or
+  finished, enforced in the UPDATE and not just checked before it, because two
+  workers can both pass the read before either writes."*
+
 #### 2026-08-11 — Three bugs found by following my own README
 - Phase: 1
 - Context: Second half of the session that closed the loop. All three of these
@@ -481,8 +533,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **222 tests** (133 TypeScript,
-  89 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
+  postgres, redis, n8n) across 5 workspaces. **245 tests** (151 TypeScript,
+  94 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%

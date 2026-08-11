@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-222_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-245_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -101,7 +101,7 @@ Claude calls. Everything else works without it.
 pnpm up:all
 ```
 
-Builds the three app images and blocks until all six services report healthy.
+Builds the app images and blocks until every service reports healthy.
 First run takes a few minutes; afterwards it is seconds.
 
 ### 3. Create the schema and demo data
@@ -126,13 +126,29 @@ stale or the public sandbox has been wiped (it is, periodically).
 | API gateway (NestJS) | http://localhost:8080/api/health | same |
 | Task inbox (JSON) | http://localhost:8080/api/tasks | same |
 | AI service (FastAPI) | http://localhost:8000/health · [`/docs`](http://localhost:8000/docs) | same |
+| Queue worker | no port — `pnpm logs` to watch it | `pnpm worker` |
 | n8n editor | http://localhost:5678 | same |
 | Postgres · Redis | 5432 · 6379 *(or your overrides)* | — |
 
 ### 5. Watch an agent run live
 
-Open the dashboard, click **View traces** on the Scheduling Agent to leave the
-drawer open, then in a second terminal:
+Type a message into **Simulate an inbound message** on the dashboard and press
+send. That is the whole interaction.
+
+The gateway creates the task and puts it on a Redis queue; the worker picks it
+up and calls the AI service; the agent reads the patient's booking, lists free
+slots and reschedules the appointment on the live FHIR sandbox. Every step
+streams into the Trace Viewer over a WebSocket with its own token count and
+dollar cost. A typical run is 3 iterations, 9 steps, about **$0.015**.
+
+The message needs to carry a patient id and a schedule id — the agent has no
+tool for looking a patient up by name, deliberately, and will ask rather than
+guess. The seeded scenario's current ids are at
+`/api/internal/fhir/seeded-scenario`, or use the CLI below, which composes the
+message for you.
+
+<details>
+<summary>Driving a run from the terminal instead</summary>
 
 ```bash
 cd apps/ai
@@ -141,18 +157,15 @@ python -m venv .venv                      # first time only
 pip install -r requirements-dev.txt       # first time only
 
 python -m app.agents.demo                 # seeded "move my Thursday appointment"
-python -m app.agents.demo <task-id>       # or run a task you typed into the dashboard
+python -m app.agents.demo <task-id>       # re-run a specific task
 ```
 
-The agent reads the patient's booking, lists free slots, reschedules the
-appointment on the live FHIR sandbox, and every step streams into the Trace
-Viewer over a WebSocket with its own token count and dollar cost. A typical run
-is 3 iterations, 9 steps, about **$0.015**.
+A hand crank for the same machine, not a second implementation: it creates a
+task through the gateway and calls `POST /run` on the AI service, which is
+exactly what the worker does. Useful when the worker is not running, or to
+re-run one task without touching the queue.
 
-The CLI is a hand crank, not a second implementation: it creates a task through
-the gateway and calls `POST /run` on the AI service, which is exactly what the
-BullMQ worker will do. Until that worker exists, the `<task-id>` form is how a
-message typed into the dashboard actually gets run.
+</details>
 
 ### Day-to-day development (hot reload)
 
@@ -163,9 +176,13 @@ stateful services in Docker and the apps on the host:
 pnpm up:infra      # Postgres+pgvector, Redis, n8n only
 pnpm web           # Vite dev server  -> http://localhost:5173
 pnpm api           # NestJS in watch mode -> http://localhost:8080
+pnpm worker        # queue worker, watch mode
 
 cd apps/ai && uvicorn app.main:app --reload --port 8000
 ```
+
+All four are needed for a task submitted in the dashboard to run end to end.
+Without the worker, tasks are created and enqueued but nothing consumes them.
 
 > This script used to be called `pnpm up`, which does not do what it looks
 > like: `up` is pnpm's own alias for `update`, so it shadowed the script and
@@ -174,8 +191,8 @@ cd apps/ai && uvicorn app.main:app --reload --port 8000
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 133 tests, 5 workspaces
-cd apps/ai && pytest && ruff check .                     # 89 tests
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 151 tests, 5 workspaces
+cd apps/ai && pytest && ruff check .                     # 94 tests
 ```
 
 ### Useful extras
@@ -231,6 +248,7 @@ to end against real Claude and a real FHIR server.
 | **Live Trace Viewer** | steps stream over a WebSocket as the agent works, with an HTTP backfill so a drawer opened mid-run does not start mid-thought |
 | **Task creation** | the *Simulate an inbound message* box creates a real task |
 | **`POST /run`** | the AI service runs a task and reports its outcome synchronously, so a queue can retry on the answer. A failed run is recorded `failed`, never left `running` |
+| **Queue + worker** | BullMQ over Redis. The gateway enqueues on task creation, a separate worker process consumes and drives the run — `--scale worker=3` is the whole throughput story. Retries only what is worth retrying, and a task can be claimed by exactly one run |
 
 ### Still fixture data
 
@@ -240,14 +258,17 @@ task creation are wired to the backend.
 
 ### Not built yet
 
-**One link left in the loop: the queue.** A task created from the dashboard is
-still not picked up automatically — `POST /run` exists and works, but nothing
-calls it on its own, so a task sits `queued` until
-`python -m app.agents.demo <task-id>` is run against it. BullMQ is the next
-commit and the last piece.
+**The loop is closed** — type a message, the agent runs, the appointment moves.
+What is left is breadth, not the spine:
 
-Also missing: auth and RBAC · multi-tenancy RLS · n8n workflows · Follow-up and
-Document Q&A agents · analytics and evals · deployment.
+Auth and RBAC · multi-tenancy RLS · n8n workflows (n8n is in the stack at :5678
+but no workflow is wired to an agent) · Follow-up and Document Q&A agents ·
+analytics and evals · deployment.
+
+Two known sharp edges: the enqueue happens just after the task is committed
+rather than inside it, so a Redis outage in that window leaves a task that needs
+a manual nudge (an outbox would fix it), and the `internal/` routes still have
+no service token.
 
 See [`09-TODO.md`](./09-TODO.md) for the live checklist and
 [`10-LESSONS.md`](./10-LESSONS.md) for what broke along the way.
@@ -263,9 +284,10 @@ See [`09-TODO.md`](./09-TODO.md) for the live checklist and
 **AI:** Claude via the Anthropic SDK, hand-written tool-use loop, adaptive thinking
 **Data:** PostgreSQL + pgvector, Drizzle ORM with committed SQL migrations ([ADR-004](./docs/adr/ADR-004-postgres-ownership-and-drizzle.md))
 **Interop:** FHIR R4 against the public HAPI sandbox ([ADR-008](./docs/adr/ADR-008-fhir-access-through-the-gateway.md))
+**Queue:** BullMQ over Redis, worker in its own process
 **Infra:** Docker Compose, GitHub Actions CI (Node + Python + a compose smoke test)
 
-**Planned:** BullMQ workers · n8n workflows · OpenAI fallback behind the provider
+**Planned:** n8n workflows · OpenAI fallback behind the provider
 interface · Recharts analytics · TanStack Query · Vercel + Fly.io deployment.
 
 Full rationale in [`05-TECH-STACK.md`](./05-TECH-STACK.md).
