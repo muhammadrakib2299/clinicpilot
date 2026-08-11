@@ -10,9 +10,9 @@ const EXAMPLE = "Hi, I need to move my Thursday appointment to next week.";
  * The "simulate an inbound message" box from 09-TODO.
  *
  * Creates a real task through the gateway and hands the id up so the Trace
- * Viewer can subscribe to it. Phase 1 has no queue worker yet, so a task sits
- * `queued` until an agent run is started against it — the drawer opens either
- * way and streams whatever arrives.
+ * Viewer can subscribe to it. The gateway enqueues it and the worker starts the
+ * run, so steps begin arriving on their own — the drawer opens immediately and
+ * streams whatever shows up, which is why it subscribes before anything exists.
  */
 export function TaskComposer({ onTaskCreated }: { onTaskCreated: (taskId: string) => void }) {
   const [value, setValue] = useState(EXAMPLE);

@@ -89,14 +89,17 @@ export function TasksPage({ onOpenTask }: { onOpenTask: (taskId: string) => void
         )}
       </Card>
 
-      {/* Honest about the gap rather than leaving the user to discover it. */}
+      {/* The queue closed this gap; what is left is the failure mode, which is
+          worth naming because `queued` looks identical either way. */}
       <p className="text-xs text-muted">
-        Tasks stay <span className="font-mono">queued</span> until an agent run is triggered — the
-        queue worker is not built yet. Run{" "}
+        Tasks are picked up automatically by the queue worker. One that stays{" "}
+        <span className="font-mono">queued</span> means no worker is running — start it with{" "}
+        <code className="rounded bg-surface-2 px-1 py-0.5 font-mono">pnpm worker</code>, or run a
+        single task by hand with{" "}
         <code className="rounded bg-surface-2 px-1 py-0.5 font-mono">
-          python -m app.agents.demo
-        </code>{" "}
-        to drive one.
+          python -m app.agents.demo &lt;task-id&gt;
+        </code>
+        .
       </p>
     </div>
   );
