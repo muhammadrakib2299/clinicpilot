@@ -1,5 +1,6 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -31,6 +32,13 @@ import {
  */
 
 export const planCode = pgEnum("plan_code", ["free", "pro", "clinic", "enterprise"]);
+
+/**
+ * Ordered most-privileged first, and the order is load-bearing: `atLeast()` in
+ * the RBAC guard compares positions, so inserting a role in the middle changes
+ * who can do what. Append, or update the guard deliberately.
+ */
+export const userRole = pgEnum("user_role", ["admin", "clinician", "coordinator", "viewer"]);
 export const agentKind = pgEnum("agent_kind", ["scheduling", "followup", "docqa"]);
 export const agentStatus = pgEnum("agent_status", ["active", "degraded", "paused"]);
 export const taskChannel = pgEnum("task_channel", ["web", "sms", "voice", "email"]);
@@ -55,6 +63,103 @@ export const tenants = pgTable("tenants", {
   plan: planCode("plan").notNull().default("free"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Identity is global; membership is what makes it tenant-scoped.
+ *
+ * `06-ARCHITECTURE` sketched `users.tenant_id` plus a `roles` lookup and a
+ * `user_roles` join. Two changes, both deliberate:
+ *
+ * 1. A user has no tenant of their own. The sketch had `tenant_id` on both
+ *    `users` and `user_roles`, which contradicts itself the moment someone
+ *    belongs to two clinics — and the tenant switcher in this phase requires
+ *    exactly that.
+ * 2. `roles` is an enum, not a table. It is four values that the RBAC guard
+ *    also has to know at compile time, so a lookup table buys a join and a
+ *    second place for them to disagree.
+ *
+ * Deliberately NOT tenant-scoped for RLS: a login has to find the user before
+ * any tenant is known. Isolation for this table comes from never exposing it
+ * except through the session.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    /** scrypt, salt included — see common/password.ts for the format. */
+    passwordHash: text("password_hash").notNull(),
+    mfaEnabled: boolean("mfa_enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  },
+  (table) => [
+    // Case-insensitive: nobody expects Admin@demo and admin@demo to be two
+    // accounts, and allowing both is an account-takeover shaped problem.
+    uniqueIndex("users_email_key").on(sql`lower(${table.email})`),
+  ],
+);
+
+/**
+ * Which tenants a user belongs to, and as what.
+ *
+ * One row per (user, tenant). The tenant switcher lists these; the JWT names
+ * the one currently active; RLS enforces that the choice was legitimate.
+ */
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    role: userRole("role").notNull().default("viewer"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("memberships_user_tenant_key").on(table.userId, table.tenantId),
+    index("memberships_tenant_idx").on(table.tenantId),
+  ],
+);
+
+/**
+ * Append-only record of who did what to which resource.
+ *
+ * HIPAA's audit-control safeguard is the reason this exists, and "append-only"
+ * is enforced by a trigger in the migration rather than by convention — an
+ * audit log an application can edit is a log, not an audit trail.
+ *
+ * `actorId` is nullable on purpose: the AI service acts with no user in the
+ * request, and recording that as "system" is more truthful than attributing a
+ * machine's FHIR read to whoever happened to submit the task.
+ */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    /** Denormalised so a deleted user does not erase who did the thing. */
+    actorEmail: text("actor_email"),
+    action: text("action").notNull(),
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id"),
+    metadata: jsonb("metadata"),
+    ip: text("ip"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_log_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
+    index("audit_log_actor_idx").on(table.actorId),
+    index("audit_log_resource_idx").on(table.resourceType, table.resourceId),
+  ],
+);
 
 export const agents = pgTable(
   "agents",
@@ -171,6 +276,21 @@ export const llmUsage = pgTable(
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   agents: many(agents),
   tasks: many(tasks),
+  memberships: many(memberships),
+}));
+
+export const usersRelations = relations(users, ({ many }) => ({
+  memberships: many(memberships),
+}));
+
+export const membershipsRelations = relations(memberships, ({ one }) => ({
+  user: one(users, { fields: [memberships.userId], references: [users.id] }),
+  tenant: one(tenants, { fields: [memberships.tenantId], references: [tenants.id] }),
+}));
+
+export const auditLogRelations = relations(auditLog, ({ one }) => ({
+  tenant: one(tenants, { fields: [auditLog.tenantId], references: [tenants.id] }),
+  actor: one(users, { fields: [auditLog.actorId], references: [users.id] }),
 }));
 
 export const agentsRelations = relations(agents, ({ one, many }) => ({
@@ -196,13 +316,33 @@ export const llmUsageRelations = relations(llmUsage, ({ one }) => ({
 }));
 
 export type Tenant = typeof tenants.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type Membership = typeof memberships.$inferSelect;
+export type AuditEntry = typeof auditLog.$inferSelect;
 export type Agent = typeof agents.$inferSelect;
 export type Task = typeof tasks.$inferSelect;
 export type Trace = typeof traces.$inferSelect;
 export type LlmUsage = typeof llmUsage.$inferSelect;
 
 export type NewTenant = typeof tenants.$inferInsert;
+export type NewUser = typeof users.$inferInsert;
+export type NewMembership = typeof memberships.$inferInsert;
+export type NewAuditEntry = typeof auditLog.$inferInsert;
 export type NewAgent = typeof agents.$inferInsert;
 export type NewTask = typeof tasks.$inferInsert;
 export type NewTrace = typeof traces.$inferInsert;
 export type NewLlmUsage = typeof llmUsage.$inferInsert;
+
+/**
+ * Tables RLS protects, and therefore the ones every query must carry a tenant
+ * for. `users` is absent by design — login resolves an identity before any
+ * tenant exists to scope it to.
+ */
+export const TENANT_SCOPED_TABLES = [
+  "agents",
+  "tasks",
+  "traces",
+  "llm_usage",
+  "memberships",
+  "audit_log",
+] as const;

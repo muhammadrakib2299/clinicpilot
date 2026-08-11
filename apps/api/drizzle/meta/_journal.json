@@ -8,6 +8,20 @@
       "when": 1785317629796,
       "tag": "0000_phase1_spine",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786448731600,
+      "tag": "0001_phase2_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786448731601,
+      "tag": "0002_phase2_rls",
+      "breakpoints": true
     }
   ]
 }
