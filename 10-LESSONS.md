@@ -170,6 +170,57 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-08-11 — The loop was never closed, and the docs undersold it
+- Phase: 1
+- Context: Came back after a 13-day gap and audited real status before writing
+  anything, the same way the July 29 session started. Then built the gateway
+  FHIR endpoints ADR-008 has been asking for since it was written.
+- **The audit finding that mattered.** `09-TODO` and the README both describe
+  the queue gap as "a created task sits `queued` until a run is triggered by
+  hand." That is true and it is not the whole truth. `apps/ai/app/main.py`
+  exposes **only `/health`** — there is no endpoint that runs an agent at all —
+  and `demo.py` creates its *own* task with a hardcoded message. So the thing
+  you type into the dashboard is not merely delayed. It is never run. Two
+  sentences of honest-sounding documentation described a smaller problem than
+  the one I had.
+  - Worth keeping: "triggered by hand" and "unreachable from the product" are
+    different claims, and the first is the comfortable way to write the second.
+- **A test caught my normaliser doing the thing it exists to prevent.**
+  `FhirId` strips a `ResourceType/` prefix so the model can pass ids either
+  way. I also stripped trailing slashes, mirroring the Python helper. That made
+  `Appointment/` — a prefix with the id *missing* — parse cleanly to the id
+  `Appointment`, which would have gone to HAPI as a lookup for a resource
+  nobody asked about. Forgiving a leading slash is safe; forgiving a trailing
+  one changes what the input means. The asymmetry is now deliberate and tested.
+- **"Speaks no FHIR" had to be made true, not just written down.** ADR-008 says
+  the AI service holds no FHIR knowledge. Returning raw R4 `Appointment`
+  resources from the gateway would have kept the letter of that and broken the
+  substance, because the tool executor would still need to know where `start`
+  lives and how `participant` nests. The endpoints return flat projections —
+  five fields for an appointment, three for a slot. Widen when an agent needs
+  more.
+- **Put the id in the body, not the path.** `POST /appointments/:id/reschedule`
+  is the better URL right up until the model sends `Appointment/137240399`,
+  which matches no route and yields a bare 404 instead of the id error it could
+  act on. This is RPC for one machine caller; robustness at a boundary a model
+  drives beats REST shape.
+- **Verified live, because stubs prove mapping and not much else.** Re-seeded
+  the sandbox (slot times are relative to today, so a 13-day-old scenario has
+  its "Thursday appointment" in the past), then drove all three endpoints
+  against real HAPI with the prefixed ids Claude actually produced. The
+  reschedule moved the appointment and wrote `slot: ["Slot/137240396"]` —
+  singular. The double-prefixed `Slot/Slot/…` that the throwaway Python adapter
+  wrote onto a live appointment is now unreachable through this path.
+- What I'd do differently: audit before believing my own status docs, every
+  time. This is the second consecutive session where reading the code found
+  something the documentation had rounded off in its own favour — and the
+  documentation was written by me, one session earlier, in good faith.
+- Interview soundbite: *"My own docs said tasks sat queued until triggered by
+  hand. Reading the code, the AI service had no run endpoint at all and the
+  demo script created its own task — so a message typed into the product was
+  never executed, just never reported that way. 'Delayed' and 'unreachable' are
+  different bugs, and the comfortable phrasing hid the second one."*
+
 #### 2026-07-29 — I asked myself to click every page, and found eight dead buttons
 - Phase: 1
 - Context: Asked to walk the whole portal. I had shipped a dashboard that *looked*
@@ -388,7 +439,7 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **145 tests** (89 TypeScript,
+  postgres, redis, n8n) across 5 workspaces. **186 tests** (130 TypeScript,
   56 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost

@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_1_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-145_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-186_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -158,7 +158,7 @@ cd apps/ai && uvicorn app.main:app --reload --port 8000
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 89 tests, 5 workspaces
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 130 tests, 5 workspaces
 cd apps/ai && pytest && ruff check .                     # 56 tests
 ```
 
@@ -209,6 +209,7 @@ to end against real Claude and a real FHIR server.
 | **Claude tool-use loop** | reason → tool → observe → act, with escalation when it cannot converge. Verified live |
 | **Scheduling agent** | reads bookings, finds free slots, reschedules on the HAPI FHIR sandbox |
 | **FHIR R4 client** | typed, with optimistic concurrency — re-reads and sends a weak-ETag `If-Match`, so a stale write is rejected rather than clobbering someone else's booking |
+| **FHIR behind the gateway** | `internal/fhir` serves appointments, free slots and reschedule ([ADR-008](./docs/adr/ADR-008-fhir-access-through-the-gateway.md)). Ids are normalised at the boundary and FHIR failures map to statuses an agent can recover from |
 | **Cost accounting** | per-step tokens and dollars, cache-aware; `traces` and `llm_usage` reconcile to the microdollar |
 | **Trace persistence** | 5 tables, migrations, `tenant_id` everywhere ready for Phase 2 RLS |
 | **Live Trace Viewer** | steps stream over a WebSocket as the agent works, with an HTTP backfill so a drawer opened mid-run does not start mid-thought |
@@ -222,9 +223,15 @@ task creation are wired to the backend.
 
 ### Not built yet
 
-Auth and RBAC · multi-tenancy RLS · BullMQ queue and worker (so a created task
-sits `queued` until an agent run is started against it) · n8n workflows ·
-Follow-up and Document Q&A agents · analytics and evals · deployment.
+**The loop is not closed.** The AI service exposes only `/health` — there is no
+endpoint that runs an agent — and there is no queue, so a task created from the
+dashboard is never executed. The agent runs today only from
+`python -m app.agents.demo`, which creates its *own* task and ignores whatever
+the UI submitted. Closing that is the current work: gateway FHIR endpoints
+(done), then the AI service run endpoint, then BullMQ.
+
+Also missing: auth and RBAC · multi-tenancy RLS · n8n workflows · Follow-up and
+Document Q&A agents · analytics and evals · deployment.
 
 See [`09-TODO.md`](./09-TODO.md) for the live checklist and
 [`10-LESSONS.md`](./10-LESSONS.md) for what broke along the way.
