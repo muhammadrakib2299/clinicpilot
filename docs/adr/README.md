@@ -9,17 +9,17 @@ Numbered in the order the decision was accepted, never renumbered.
 | [002](./ADR-002-polyglot-backend.md) | Polyglot backend: NestJS gateway + FastAPI AI service | Accepted | 0 |
 | 003 | Provider abstraction: Claude primary, OpenAI fallback | Planned | 1–3 |
 | [004](./ADR-004-postgres-ownership-and-drizzle.md) | The gateway owns Postgres; Drizzle is the ORM | Accepted | 1 |
-| 005 | Multi-tenancy via Postgres row-level security | Planned | 2 |
+| [005](./ADR-005-multi-tenancy-via-row-level-security.md) | Multi-tenancy via Postgres row-level security | Accepted | 2 |
 | 006 | PHI redaction boundary before any model call | Planned | 3 |
 | [007](./ADR-007-queue-and-worker-topology.md) | Queue and worker topology (BullMQ) | Accepted | 1 |
 | [008](./ADR-008-fhir-access-through-the-gateway.md) | FHIR access goes through the gateway | Accepted | 1 |
 
-003, 005 and 006 are reserved to match references already in `08-PLAN.md`,
+003 and 006 are reserved to match references already in `08-PLAN.md`,
 `09-TODO.md` and `06-ARCHITECTURE-SCALABILITY.md`. Accepted decisions take the
 next free number, so 004, 007 and 008 are out of phase order — numbers record
 acceptance order, not planning order.
 
-**A reserved number is not a decision.** 003, 005 and 006 stay unwritten until
+**A reserved number is not a decision.** 003 and 006 stay unwritten until
 the work is done, because an ADR written in advance records an intention, and
 the point of the format is to record what was actually chosen and what it cost.
 Each is written in the phase that builds it.

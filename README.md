@@ -3,8 +3,8 @@
 > **One-line pitch:** ClinicPilot is a multi-tenant SaaS control plane that lets healthcare clinics deploy, orchestrate, and monitor a fleet of AI agents (scheduling, patient follow-up, document Q&A) built on n8n workflows and the Claude API — with FHIR/EHR integration, role-based access, and a HIPAA-minded audit trail baked in.
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
-![status](https://img.shields.io/badge/status-Phase_1_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-250_passing-brightgreen)
+![status](https://img.shields.io/badge/status-Phase_2_in_progress-blue)
+![tests](https://img.shields.io/badge/tests-290_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -61,7 +61,7 @@ The three flagship agents:
 ## Live demo
 
 - **Live demo:** _TODO — deploy to Vercel (frontend) + Fly.io/Render (API + n8n) and paste URL here_
-- **Demo login:** _TODO — seeded `admin@demo.clinicpilot.io` / read-only `viewer@demo.clinicpilot.io`_
+- **Demo login:** seeded and working locally — `admin@demo.clinicpilot.io`, `clinician@`, `coordinator@`, `viewer@`, password `clinicpilot`. The role changes what the app lets you do; the login screen lists them.
 - **Walkthrough video (2 min):** _TODO — Loom link_
 - **Architecture diagram:** [`docs/diagrams/architecture.md`](./docs/diagrams/architecture.md) — request path, task lifecycle, deployment topology
 
@@ -108,11 +108,23 @@ First run takes a few minutes; afterwards it is seconds.
 
 ```bash
 pnpm db:migrate     # apply migrations (committed SQL from drizzle-kit)
-pnpm db:seed        # demo tenant + the three-agent fleet
+pnpm db:rls         # create the unprivileged role the gateway connects as
+pnpm db:seed        # two demo clinics, their agent fleets, and four users
 pnpm fhir:seed      # synthetic scheduling scenario on the HAPI sandbox
 ```
 
-All three are safe to re-run. `fhir:seed` *refreshes* rather than skipping,
+`db:rls` is not optional. **Postgres superusers bypass row-level security
+silently** — the policies stay in place and every one is skipped — and the
+compose default user is a superuser. Without this step tenant isolation is not
+enforced, which is why `/api/health` reports `tenantIsolation` and degrades
+when it is bypassed:
+
+```bash
+curl -s localhost:8080/api/health
+# {"status":"ok","dependencies":{"database":"up","tenantIsolation":"enforced"}}
+```
+
+All four are safe to re-run. `fhir:seed` *refreshes* rather than skipping,
 because slot times are relative to today — re-run it whenever the demo has gone
 stale or the public sandbox has been wiped (it is, periodically).
 
@@ -132,8 +144,8 @@ stale or the public sandbox has been wiped (it is, periodically).
 
 ### 5. Watch an agent run live
 
-Type a message into **Simulate an inbound message** on the dashboard and press
-send. That is the whole interaction.
+Sign in (the login screen lists the demo accounts), then type a message into
+**Simulate an inbound message** and press send. That is the whole interaction.
 
 The gateway creates the task and puts it on a Redis queue; the worker picks it
 up and calls the AI service; the agent reads the patient's booking, lists free
@@ -191,7 +203,7 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 151 tests, 5 workspaces
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 191 tests, 5 workspaces
 cd apps/ai && pytest && ruff check .                     # 99 tests
 ```
 
@@ -252,6 +264,9 @@ to end against real Claude and a real FHIR server.
 | **Task creation** | the *Simulate an inbound message* box creates a real task |
 | **`POST /run`** | the AI service runs a task and reports its outcome synchronously, so a queue can retry on the answer. A failed run is recorded `failed`, never left `running` |
 | **Queue + worker** | BullMQ over Redis. The gateway enqueues on task creation, a separate worker process consumes and drives the run — `--scale worker=3` is the whole throughput story. Retries only what is worth retrying, and a task can be claimed by exactly one run |
+| **Auth + RBAC** | Login, four hierarchical roles, one global guard that closes every route by default. A service token in front of `internal/`, compared in constant time |
+| **Tenant isolation** | Postgres RLS on an unprivileged role, tenant set per transaction ([ADR-005](./docs/adr/ADR-005-multi-tenancy-via-row-level-security.md)). Two seeded clinics, and a switcher for the user who belongs to both |
+| **Audit log** | Append-only, enforced by trigger — the database refuses UPDATE and DELETE. Filterable, exportable, and the export is itself audited |
 
 ### Still fixture data
 
@@ -261,17 +276,20 @@ task creation are wired to the backend.
 
 ### Not built yet
 
-**The loop is closed** — type a message, the agent runs, the appointment moves.
-What is left is breadth, not the spine:
+**The loop is closed and governed** — sign in, type a message, the agent runs,
+the appointment moves, and every step of it is audited under a tenant that
+Postgres enforces. What is left is breadth:
 
-Auth and RBAC · multi-tenancy RLS · n8n workflows (n8n is in the stack at :5678
-but no workflow is wired to an agent) · Follow-up and Document Q&A agents ·
-analytics and evals · deployment.
+n8n workflows (n8n is in the stack at :5678 but no workflow is wired to an
+agent) · Follow-up and Document Q&A agents · analytics and evals · Stripe and
+quotas · deployment.
 
-Two known sharp edges: the enqueue happens just after the task is committed
-rather than inside it, so a Redis outage in that window leaves a task that needs
-a manual nudge (an outbox would fix it), and the `internal/` routes still have
-no service token.
+Known sharp edges, all tracked in [`09-TODO.md`](./09-TODO.md) and
+[`SECURITY.md`](./SECURITY.md): the enqueue sits just outside the task's
+transaction, so a Redis outage in that window leaves a task needing a manual
+nudge; the JWT lives in `localStorage` rather than an httpOnly cookie, which is
+a real XSS exposure and is Phase 5 work alongside TLS; and the RLS isolation
+checks are verified by hand rather than in CI.
 
 See [`09-TODO.md`](./09-TODO.md) for the live checklist and
 [`10-LESSONS.md`](./10-LESSONS.md) for what broke along the way.

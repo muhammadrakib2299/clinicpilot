@@ -170,6 +170,57 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 - What I'd do differently: add a placeholder `App.tsx` earlier so every intermediate commit builds in isolation (a couple of mid-sequence web commits reference not-yet-added files).
 - Interview soundbite: *"I set the repo up as a pnpm + Turborepo monorepo with a deliberate web/api/ai service split and a design system where depth comes from layered flat surfaces and hairline borders — no gradients — enforced through CSS tokens."*
 
+#### 2026-08-11 — Phase 2: three bugs from asserting instead of verifying
+- Phase: 2
+- Context: Auth, RBAC, row-level security and an append-only audit log. The
+  largest phase so far, and the one where I was wrong most often.
+- **Superusers bypass RLS silently, and the compose default user is one.** No
+  warning, no error — the policies stay in place and every one is skipped. The
+  obvious wiring (reuse `DATABASE_URL`) would have left Phase 2 looking
+  complete and enforcing nothing, with the code, the schema and the tests all
+  reading correctly. That is worse than having no policies. Hence a separate
+  `NOSUPERUSER NOBYPASSRLS` role, and hence `/api/health` reporting
+  `tenantIsolation` — the only defence against an invisible failure is to make
+  it visible.
+- **Three bugs, one cause: I wrote a comment asserting behaviour I had not
+  run.** Each was found by the first live request, not by 117 unit tests.
+  - `membershipsFor` queried an RLS-protected table with a `user_id` filter and
+    no tenant, with a comment explaining why that was safe. RLS matched nothing
+    and every login failed. Fixed by widening the *policy* — a membership is
+    visible to its tenant **or** to its owner — rather than stepping around it.
+  - The auth guard opened the AsyncLocalStorage scope with
+    `storage.run(actor, () => true)`. That scope closes when the callback
+    returns, so the controller ran outside it. Guards cannot wrap the handler;
+    middleware can. The store had to become a mutable box opened *before* the
+    actor exists.
+  - `@Header` sets a *response* header. The request decorator is `@Headers`.
+    Every internal call would have 400'd.
+- **The paranoid default paid for itself the same afternoon.** `currentTenantId()`
+  throws with no actor in scope instead of returning a default. The scoping bug
+  above therefore surfaced as a loud 500 on the first request. The Phase 1
+  version returned a hardcoded demo tenant — the identical bug there would have
+  been every user silently reading one clinic's data, with nothing in any log.
+- **A test caught a real weakness in my password hashing.** scrypt finishes
+  with PBKDF2, whose output blocks are generated independently — so a shorter
+  derived key is a *prefix* of the longer one, and verifying against a
+  truncated stored hash succeeded. Truncated to one byte, any password had a
+  1-in-256 chance. A minimum digest length closes it. I only wrote that test
+  because "reject a malformed hash" felt like an obvious case to cover.
+- **Packaging, again, at the boundary.** The shared-types package shipped CJS
+  only, on a comment saying "Vite consumes CJS without complaint" — true while
+  only *types* crossed, because they erase. The first runtime import broke the
+  web build. Fixing it dragged zod into the browser: +17 KB gzipped for one
+  comparison, in a project that rejected socket.io over 40 KB. Split the roles
+  into a dependency-free entry point; back to 73.5 KB.
+- What I'd do differently: run the thing before writing the comment that
+  explains why it works. Every one of these was a confident sentence in a
+  docstring next to code that did something else.
+- Interview soundbite: *"Postgres superusers bypass row-level security
+  silently — no error, policies just skipped — and the default Docker user is
+  one. So the gateway connects as an unprivileged role, and the health endpoint
+  reports whether isolation is actually being enforced, because the failure it
+  detects is otherwise completely invisible."*
+
 #### 2026-08-11 — Closing the loop, and what at-least-once actually costs
 - Phase: 1
 - Context: BullMQ producer and worker. The end of a session that took the
@@ -547,7 +598,7 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **250 tests** (151 TypeScript,
+  postgres, redis, n8n) across 5 workspaces. **290 tests** (191 TypeScript,
   99 Python); coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost

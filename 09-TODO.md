@@ -48,10 +48,9 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
       no id-normalisation logic of its own
 - [ ] `RealtimeService` is an in-process rxjs Subject — becomes Redis pub/sub
       when the gateway runs more than one replica (Phase 4)
-- [ ] `internal/` routes have no service token yet; they must not be publicly
-      reachable before deploy (Phase 2, alongside RBAC). **Higher stakes since
-      2026-08-11**: the surface now reads and writes patient data with no user
-      in the request at all
+- [x] ~~`internal/` routes have no service token~~ — paid 2026-08-11.
+      `@ServiceOnly()` puts a constant-time-compared token in front of them,
+      and an unset `SERVICE_TOKEN` closes the surface rather than opening it
 - [ ] `FhirClient` sets no HTTP timeout. A hanging HAPI hangs the gateway
       request — the sandbox returned `fetch failed` once mid-session and took
       7.8s on a plain read shortly after
@@ -74,8 +73,8 @@ the auth that Phase 2 owns anyway.
 - [x] DB migrations: `tenants`, `agents`, `tasks`, `traces`, `llm_usage`
       (Drizzle, committed SQL — `users` lands with auth)
 - [x] Seed one tenant + the three-agent fleet (idempotent, fixed demo tenant id)
-- [ ] Login flow (JWT/session) + protected routes — **deferred**, single hardcoded
-      tenant behind `currentTenantId()` so Phase 2 swaps it in one place
+- [x] Login flow (JWT/session) + protected routes — the one-file swap the
+      Phase 1 note promised: `currentTenantId()` now reads the request actor
 ### FHIR
 - [x] Build `packages/fhir-client` typed R4 client (HAPI base URL)
 - [x] Read `Patient`, `Appointment`, `Slot`; write `Appointment`
@@ -128,16 +127,26 @@ the auth that Phase 2 owns anyway.
 - [ ] Sidebar persona "Priya Nair" — labelled `Admin · demo`; real once auth lands
 
 ## Phase 2 — Multi-tenancy, RBAC & Audit
-- [ ] Add `tenant_id` to all tenant-scoped tables
-- [ ] Postgres RLS policies + tenant-context middleware (ADR-005)
-- [ ] Seed 2–3 synthetic clinics; tenant switcher in UI
-- [ ] Roles: Admin/Clinician/Coordinator/Viewer + `user_roles`
-- [ ] NestJS RBAC guards + policy decorators
-- [ ] RBAC-gated navigation in the SPA
-- [ ] Append-only `audit_log`; write on every action/tool call/data access
-- [ ] Audit Log UI: filter (actor/resource/action), export CSV
+- [x] Add `tenant_id` to all tenant-scoped tables
+- [x] Postgres RLS policies + tenant-context middleware (ADR-005) — on a
+      `NOSUPERUSER NOBYPASSRLS` role, because superusers bypass RLS silently;
+      `/api/health` reports whether it is actually being enforced
+- [x] Seed 2 synthetic clinics; tenant switcher in UI — switching mints a new
+      token, since the tenant is a claim inside it
+- [x] Roles: Admin/Clinician/Coordinator/Viewer + `memberships` (one table
+      with a role enum, not `roles` + `user_roles` — see the schema comment)
+- [x] NestJS RBAC guards + policy decorators — one global guard, closed by
+      default: a new controller is protected until it opts out
+- [x] RBAC-gated navigation in the SPA
+- [~] Append-only `audit_log` — enforced by trigger, not convention. Writes on
+      auth, task lifecycle and every FHIR access. Not yet on agent tool calls
+      individually; the trace already records those
+- [x] Audit Log UI: filter (actor/resource/action), export CSV — the export is
+      itself audited
 - [ ] TLS locally; secrets via env/secret manager; document posture
-- [ ] Test: cross-tenant access is blocked by RLS
+- [~] Test: cross-tenant access is blocked by RLS — verified by hand against
+      real Postgres (7 checks, all passing) and through the API. Not yet
+      automated in CI; belongs in the compose smoke job
 - [ ] ✅ Gate: roles + tenants + audit all working
 
 ## Phase 2.5 — SaaS Commercial Layer (see `11-SAAS-PRODUCTIZATION.md`)
