@@ -16,6 +16,7 @@
     "test:cov": "jest --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:rls": "tsx src/db/setup-rls.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "fhir:seed": "tsx src/fhir/seed-hapi.ts"
@@ -26,6 +27,7 @@
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.0.0",
     "@nestjs/platform-ws": "^11.1.28",
     "@nestjs/websockets": "^11.1.28",
@@ -43,6 +45,7 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.0",
+    "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.20.0",

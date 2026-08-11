@@ -3,10 +3,18 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import { DbService } from "../db/db.service";
 import { HealthController } from "./health.controller";
 
-async function controllerWith(databaseUp: boolean): Promise<HealthController> {
+async function controllerWith(databaseUp: boolean, rlsEnforced = true) {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [HealthController],
-    providers: [{ provide: DbService, useValue: { ping: async () => databaseUp } }],
+    providers: [
+      {
+        provide: DbService,
+        useValue: {
+          ping: async () => databaseUp,
+          rlsIsEnforced: async () => rlsEnforced,
+        },
+      },
+    ],
   }).compile();
 
   return module.get(HealthController);
@@ -18,14 +26,25 @@ describe("HealthController", () => {
 
     expect(result.status).toBe("ok");
     expect(result.service).toBe("clinicpilot-api");
-    expect(result.dependencies).toEqual({ database: "up" });
+    expect(result.dependencies).toEqual({ database: "up", tenantIsolation: "enforced" });
   });
 
   it("reports degraded — not ok — when the database is unreachable", async () => {
     const result = await (await controllerWith(false)).check();
 
     expect(result.status).toBe("degraded");
-    expect(result.dependencies).toEqual({ database: "down" });
+    expect(result.dependencies.database).toBe("down");
+  });
+
+  it("degrades when tenant isolation is not being enforced", async () => {
+    // The failure this exists to catch is silent: a superuser connection
+    // applies no RLS policies and raises no error, so every isolation test
+    // still passes and no tenant is actually isolated. A reachable database
+    // is not enough to call the service healthy.
+    const result = await (await controllerWith(true, false)).check();
+
+    expect(result.status).toBe("degraded");
+    expect(result.dependencies.tenantIsolation).toBe("BYPASSED");
   });
 
   it("stamps an ISO-8601 UTC timestamp", async () => {
