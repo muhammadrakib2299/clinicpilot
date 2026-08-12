@@ -27,7 +27,9 @@
     "up:all": "docker compose -f infra/docker-compose.yml --env-file .env up -d --build --wait",
     "down": "docker compose -f infra/docker-compose.yml --env-file .env down",
     "logs": "docker compose -f infra/docker-compose.yml --env-file .env logs -f",
-    "test:integration": "pnpm --filter @clinicpilot/api test:integration"
+    "test:integration": "pnpm --filter @clinicpilot/api test:integration",
+    "n8n:import": "node scripts/n8n-import.mjs",
+    "n8n:list": "docker compose -f infra/docker-compose.yml --env-file .env exec n8n n8n list:workflow"
   },
   "devDependencies": {
     "turbo": "^2.3.3"

@@ -15,6 +15,7 @@ import { OverviewModule } from "./overview/overview.module";
 import { QueueModule } from "./queue/queue.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { TasksModule } from "./tasks/tasks.module";
+import { TenantsModule } from "./tenants/tenants.module";
 
 /**
  * Root module.
@@ -42,6 +43,7 @@ import { TasksModule } from "./tasks/tasks.module";
     FhirModule,
     MessagesModule,
     DocumentsModule,
+    TenantsModule,
   ],
   controllers: [HealthController],
 })

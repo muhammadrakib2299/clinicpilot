@@ -9,7 +9,9 @@ import {
   FindAppointmentsQuery,
   FindFreeSlotsQuery,
   IngestDocumentInput,
+  PendingMessagesQuery,
   PlanCode,
+  RecordDeliveryInput,
   RescheduleAppointmentInput,
   SearchDocumentsInput,
   TaskChannel,
@@ -345,5 +347,42 @@ describe("document ingest and search contracts", () => {
     // Without it the gateway cannot filter, and vectors from two different
     // embedders compare to a perfectly ordinary-looking number.
     expect(SearchDocumentsInput.safeParse({ embedding: vector }).success).toBe(false);
+  });
+});
+
+describe("delivery contracts", () => {
+  it("accepts a send", () => {
+    const parsed = RecordDeliveryInput.parse({ status: "sent", channel: "simulated" });
+
+    expect(parsed).toEqual({ status: "sent", channel: "simulated" });
+  });
+
+  it("will not let a failure be reported without saying what failed", () => {
+    // A failed delivery with no reason names nothing to fix, and the row is
+    // the only record anyone will have of it.
+    expect(RecordDeliveryInput.safeParse({ status: "failed", channel: "simulated" }).success).toBe(
+      false,
+    );
+  });
+
+  it("requires a channel on a failure too", () => {
+    // "Which channel failed" is the first question.
+    expect(
+      RecordDeliveryInput.safeParse({ status: "failed", error: "no number" }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a status outside the two the workflow can report", () => {
+    // `drafted` is where a message starts, not something a delivery run can
+    // set it back to.
+    expect(
+      RecordDeliveryInput.safeParse({ status: "drafted", channel: "simulated" }).success,
+    ).toBe(false);
+  });
+
+  it("defaults the sweep size, and caps it", () => {
+    // One pass should not try to deliver a whole backlog at once.
+    expect(PendingMessagesQuery.parse({}).limit).toBe(25);
+    expect(PendingMessagesQuery.safeParse({ limit: 500 }).success).toBe(false);
   });
 });

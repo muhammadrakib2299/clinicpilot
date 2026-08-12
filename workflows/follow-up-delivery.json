@@ -1,0 +1,150 @@
+{
+  "id": "clinicpilotdlvr1",
+  "name": "Follow-up delivery",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "nodes": [
+    {
+      "id": "1a000000-0000-4000-8000-000000000001",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-220, 0],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 5 }]
+        }
+      },
+      "notes": "The Follow-up Agent records a message and stops. This is what moves it."
+    },
+    {
+      "id": "1a000000-0000-4000-8000-000000000006",
+      "name": "Run now",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-220, 180],
+      "parameters": {},
+      "notes": "A second way in, so the sweep can be run on demand rather than only when the timer comes round — by an operator clearing a backlog, by `n8n execute --id=<id>`, or by another workflow. The schedule above is the normal path; this is the one you can point at and watch."
+    },
+    {
+      "id": "1a000000-0000-4000-8000-000000000002",
+      "name": "Clinics to sweep",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [0, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CLINICPILOT_API_URL }}/api/internal/tenants",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-service-token", "value": "={{ $env.SERVICE_TOKEN }}" }]
+        },
+        "options": {}
+      },
+      "notes": "A scheduled job has no session and therefore no tenant. It enumerates clinics here and scopes every later call to one at a time, so RLS still applies to every row touched."
+    },
+    {
+      "id": "1a000000-0000-4000-8000-000000000003",
+      "name": "Messages waiting",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CLINICPILOT_API_URL }}/api/internal/messages/pending",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "limit", "value": "25" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-service-token", "value": "={{ $env.SERVICE_TOKEN }}" },
+            { "name": "x-tenant-id", "value": "={{ $json.id }}" }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Runs once per clinic. Only 'drafted' comes back — a failed message is not retried on a timer, because most channel failures repeat and a five-minute retry turns one bad row into a permanent alarm."
+    },
+    {
+      "id": "1a000000-0000-4000-8000-000000000004",
+      "name": "Simulated carrier",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 0],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "tenantId",
+              "type": "string",
+              "value": "={{ $('Clinics to sweep').item.json.id }}"
+            },
+            { "id": "f2", "name": "messageId", "type": "string", "value": "={{ $json.id }}" },
+            { "id": "f3", "name": "patientRef", "type": "string", "value": "={{ $json.patientRef }}" },
+            { "id": "f4", "name": "channel", "type": "string", "value": "simulated" },
+            { "id": "f5", "name": "status", "type": "string", "value": "sent" }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "THE STAND-IN. There is no Twilio account, and an untested carrier integration is worth less than an honest seam (ADR-003, ADR-009). Replacing this node with a real SMS node is the whole change: the callback below already records which channel was used, and 'failed' with an error message is already accepted."
+    },
+    {
+      "id": "1a000000-0000-4000-8000-000000000005",
+      "name": "Record delivery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CLINICPILOT_API_URL }}/api/internal/messages/{{ $json.messageId }}/delivery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-service-token", "value": "={{ $env.SERVICE_TOKEN }}" },
+            { "name": "x-tenant-id", "value": "={{ $json.tenantId }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "status", "value": "={{ $json.status }}" },
+            { "name": "channel", "value": "={{ $json.channel }}" }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "Errors continue rather than stopping the run. The gateway 409s if the message is no longer 'drafted', which means an overlapping sweep already delivered it — expected, benign, and the correct thing to ignore. A schedule trigger will start a second pass while the first is still going if a pass runs long."
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": {
+      "main": [[{ "node": "Clinics to sweep", "type": "main", "index": 0 }]]
+    },
+    "Run now": {
+      "main": [[{ "node": "Clinics to sweep", "type": "main", "index": 0 }]]
+    },
+    "Clinics to sweep": {
+      "main": [[{ "node": "Messages waiting", "type": "main", "index": 0 }]]
+    },
+    "Messages waiting": {
+      "main": [[{ "node": "Simulated carrier", "type": "main", "index": 0 }]]
+    },
+    "Simulated carrier": {
+      "main": [[{ "node": "Record delivery", "type": "main", "index": 0 }]]
+    }
+  }
+}

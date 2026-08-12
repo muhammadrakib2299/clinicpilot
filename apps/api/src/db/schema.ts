@@ -54,11 +54,17 @@ export const taskStatus = pgEnum("task_status", [
 /**
  * Where a follow-up message got to.
  *
- * `drafted` is the honest terminal state today: the agent composes an approved
- * template and records it, and nothing delivers it. Delivery is a channel
- * integration (n8n, then SMS) that does not exist yet, so the other two values
- * are reserved rather than reachable — better than pretending `sent` when
- * nothing was.
+ * All three are reachable now. An n8n workflow sweeps `drafted` messages on a
+ * schedule, hands each to a channel, and reports back.
+ *
+ * `sent` means **the delivery workflow handed it to its configured channel** —
+ * not that it reached a phone. Which channel is recorded alongside, because
+ * the configured channel in this repo is `simulated`: there is no Twilio
+ * account and an untested carrier integration is worth less than an honest
+ * seam (the argument in ADR-003 and ADR-009, for the third time). A row
+ * therefore says what actually happened rather than implying a delivery that
+ * did not occur, and swapping the stand-in for a real node changes the value
+ * in `delivery_channel` and nothing else.
  */
 export const messageStatus = pgEnum("message_status", ["drafted", "sent", "failed"]);
 
@@ -231,11 +237,26 @@ export const messages = pgTable(
     templateId: text("template_id").notNull(),
     body: text("body").notNull(),
     status: messageStatus("status").notNull().default("drafted"),
+    /**
+     * Which channel the delivery workflow handed it to — `simulated` in this
+     * repo. Recorded rather than assumed, so `sent` is a statement about what
+     * happened rather than about what a real carrier would have done.
+     */
+    deliveryChannel: text("delivery_channel"),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    /** Why it failed, when it did. Kept so a person can act on it. */
+    deliveryError: text("delivery_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("messages_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
     index("messages_patient_idx").on(table.tenantId, table.patientRef),
+    // The delivery sweep's query: everything still waiting in one tenant,
+    // oldest first. Partial, because it is only ever run for one status and a
+    // full index would be mostly rows the sweep will never look at again.
+    index("messages_pending_idx")
+      .on(table.tenantId, table.createdAt)
+      .where(sql`status = 'drafted'`),
   ],
 );
 

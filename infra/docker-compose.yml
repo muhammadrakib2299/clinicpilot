@@ -57,6 +57,27 @@ services:
       GENERIC_TIMEZONE: UTC
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_RUNNERS_ENABLED: "true"
+      # What the workflows call, and what lets them in. The gateway's
+      # `internal/` surface takes no user, so the service token is the only
+      # thing in front of it — same token the AI service uses.
+      #
+      # Defaults to the compose network name. Running the API on the host
+      # instead (`pnpm up:infra` + `pnpm api`) means overriding it in .env:
+      #   N8N_CLINICPILOT_API_URL=http://host.docker.internal:8080
+      CLINICPILOT_API_URL: ${N8N_CLINICPILOT_API_URL:-http://api:8080}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-dev-only}
+      # n8n 2.x blocks `$env` inside nodes by default, which would leave the
+      # workflows with no way to learn either value above.
+      #
+      # The alternative is an n8n *credential* — encrypted in n8n's own store
+      # and referenced by id. That is the better answer for a shared n8n, and
+      # it is worse here: seeding one needs `N8N_ENCRYPTION_KEY` plus a
+      # credentials file, so the token ends up committed in plaintext or the
+      # workflow does not run on a fresh clone. This n8n is single-tenant, runs
+      # the workflows in this repo and no others, and sits inside the same
+      # trust boundary as the gateway it calls — the token is already in this
+      # file's environment. Revisit if anyone else's workflows ever run here.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
     ports:
       - "${N8N_PORT:-5678}:5678"
     volumes:

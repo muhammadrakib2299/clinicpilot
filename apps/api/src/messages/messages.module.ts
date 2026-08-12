@@ -1,5 +1,20 @@
-import { Body, Controller, Get, Global, Headers, Module, Post, Query } from "@nestjs/common";
-import { RecordMessageInput } from "@clinicpilot/shared-types";
+import {
+  Body,
+  Controller,
+  Get,
+  Global,
+  Headers,
+  Module,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from "@nestjs/common";
+import {
+  PendingMessagesQuery,
+  RecordDeliveryInput,
+  RecordMessageInput,
+} from "@clinicpilot/shared-types";
 
 import { ServiceOnly } from "../auth/auth.decorators";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -25,7 +40,17 @@ export class MessagesController {
   }
 }
 
-/** Where the Follow-up Agent records what it drafted. */
+/**
+ * Where the Follow-up Agent records what it drafted, and where the n8n
+ * delivery workflow picks it up.
+ *
+ * Two machine callers with different jobs on one surface, because both need
+ * the same service token and the same tenant claim. The tenant is a *header*
+ * for both, and for the workflow that is load-bearing: a scheduled job has no
+ * session, so it enumerates clinics through `internal/tenants` and then makes
+ * one scoped pass per clinic. Every query below still runs under RLS for
+ * whichever tenant was claimed.
+ */
 @ServiceOnly()
 @Controller("internal/messages")
 export class InternalMessagesController {
@@ -37,6 +62,25 @@ export class InternalMessagesController {
     @Body(new ZodValidationPipe(RecordMessageInput)) body: RecordMessageInput,
   ) {
     return this.messages.record(requireTenant(tenantId), body);
+  }
+
+  /** What the delivery sweep should attempt this pass. */
+  @Get("pending")
+  pending(
+    @Headers("x-tenant-id") tenantId: string,
+    @Query(new ZodValidationPipe(PendingMessagesQuery)) query: PendingMessagesQuery,
+  ) {
+    return this.messages.pending(requireTenant(tenantId), query.limit);
+  }
+
+  /** What the channel did with it. */
+  @Post(":id/delivery")
+  recordDelivery(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Headers("x-tenant-id") tenantId: string,
+    @Body(new ZodValidationPipe(RecordDeliveryInput)) body: RecordDeliveryInput,
+  ) {
+    return this.messages.recordDelivery(requireTenant(tenantId), id, body);
   }
 }
 

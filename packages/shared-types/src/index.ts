@@ -412,7 +412,51 @@ export interface MessageSummary {
   templateId: string;
   body: string;
   status: string;
+  /** Which channel it was handed to. Null while it is still `drafted`. */
+  deliveryChannel: string | null;
+  deliveredAt: string | null;
+  deliveryError: string | null;
   createdAt: string;
+}
+
+/**
+ * Body of `POST internal/messages/:id/delivery` — what the n8n workflow reports
+ * back after handing a message to a channel.
+ *
+ * A discriminated union rather than an optional error field, so a failure
+ * cannot be reported without saying what went wrong. `channel` is required on
+ * both: "which channel failed" is the first question, and a failure with no
+ * channel names nothing to fix.
+ */
+export const RecordDeliveryInput = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("sent"),
+    channel: z.string().trim().min(1).max(60),
+  }),
+  z.object({
+    status: z.literal("failed"),
+    channel: z.string().trim().min(1).max(60),
+    error: z.string().trim().min(1, "say what failed").max(1000),
+  }),
+]);
+export type RecordDeliveryInput = z.infer<typeof RecordDeliveryInput>;
+
+/** Query for `GET internal/messages/pending`. */
+export const PendingMessagesQuery = z.object({
+  /** Capped: one sweep should not try to deliver a whole backlog at once. */
+  limit: z.coerce.number().int().positive().max(100).default(25),
+});
+export type PendingMessagesQuery = z.infer<typeof PendingMessagesQuery>;
+
+/**
+ * A clinic, as the scheduled workflow sees it.
+ *
+ * Deliberately id and name only. This is the one list in the system that is
+ * not scoped to a tenant, so it carries as little as it possibly can.
+ */
+export interface TenantRef {
+  id: string;
+  name: string;
 }
 
 // ── Documents and retrieval ─────────────────────────────────────────────────
