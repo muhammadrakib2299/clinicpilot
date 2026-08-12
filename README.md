@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_2_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-387_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-555_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -170,7 +170,16 @@ pip install -r requirements-dev.txt       # first time only
 
 python -m app.agents.demo                 # seeded "move my Thursday appointment"
 python -m app.agents.demo <task-id>       # re-run a specific task
+
+python -m app.rag.ingest --demo           # clinic documents -> pgvector, both clinics
 ```
+
+`ingest` is what gives the Document Q&A agent anything to answer from: it
+chunks, embeds and stores six documents per clinic (43 passages each). Re-run it
+after editing one — the gateway replaces a document's passages rather than
+appending, so nothing stale is left in the index. Opening hours differ between
+the two seeded clinics on purpose, so the same question returns each clinic's
+own answer.
 
 A hand crank for the same machine, not a second implementation: it creates a
 task through the gateway and calls `POST /run` on the AI service, which is
@@ -203,9 +212,9 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 202 tests, 5 workspaces
-pnpm test:integration                                    # 14, needs a live database
-cd apps/ai && pytest && ruff check .                     # 171 tests
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 215 tests, 5 workspaces
+pnpm test:integration                                    # 44, needs a live database
+cd apps/ai && pytest && ruff check .                     # 296 tests
 ```
 
 ### Useful extras
@@ -248,8 +257,22 @@ Redis, n8n, the API gateway, the AI service and the SPA online health-gated. CI
 runs lint, typecheck, test and build across both toolchains, plus a compose smoke
 test that stands the whole stack up and probes it on every push.
 
-**Phase 1 — Scheduling agent vertical slice: in progress.** The agent works end
-to end against real Claude and a real FHIR server.
+**Phase 1 — Scheduling agent vertical slice: the loop is closed.** The agent
+works end to end against real Claude and a real FHIR server.
+
+**Phase 2 — Multi-tenancy, RBAC and audit: complete.** Four roles, two clinics,
+Postgres row-level security on an unprivileged role, and an append-only audit
+log the database will not let the application edit.
+
+**Phase 3 — The full fleet: the three agents are deployed.** An orchestrator
+routes an unlabelled patient message to Scheduling, Follow-up or Document Q&A,
+or refuses and hands it to a human. `/health` reports the router's lanes and the
+deployed agents as the same set.
+
+One thing is *not* verified and is not claimed: an end-to-end run of the new
+agents against a real model. The `ANTHROPIC_API_KEY` in the local `.env` returns
+401, so the whole retrieval path was exercised live against the gateway and a
+real pgvector database, and the model call was not.
 
 ### Working today
 
@@ -268,33 +291,50 @@ to end against real Claude and a real FHIR server.
 | **Auth + RBAC** | Login, four hierarchical roles, one global guard that closes every route by default. A service token in front of `internal/`, compared in constant time |
 | **Tenant isolation** | Postgres RLS on an unprivileged role, tenant set per transaction ([ADR-005](./docs/adr/ADR-005-multi-tenancy-via-row-level-security.md)). Two seeded clinics, and a switcher for the user who belongs to both |
 | **Audit log** | Append-only, enforced by trigger — the database refuses UPDATE and DELETE. Filterable, exportable, and the export is itself audited |
-| **Isolation, tested** | 14 integration tests as the unprivileged role. CI re-runs them with RLS bypassed and fails if they still pass, because a test that cannot fail is worth nothing |
+| **Isolation, tested** | 31 integration tests as the unprivileged role, over every tenant-scoped table. CI re-runs them with RLS bypassed and fails if they still pass, because a test that cannot fail is worth nothing |
 | **PHI redaction** | Identifiers become stable pseudonyms before any model call, restored before a human reads the reply ([ADR-006](./docs/adr/ADR-006-phi-redaction-before-model-calls.md)). A provider decorator, so no code path can route around it |
 | **Model fallback** | A second model behind the first, for the failures where retrying elsewhere could plausibly help — and only those ([ADR-003](./docs/adr/ADR-003-provider-fallback.md)) |
 | **Self-check before writes** | Mutating tools get a second opinion in a fresh context before they run. Fails closed; a block goes back as an observation the model can correct from |
+| **Orchestrator** | One cheap model call routes an unlabelled message to a lane — **or refuses to.** Anything clinical, urgent or unplaceable escalates, and the parser reads only the first bare word, so a hedging paragraph escalates even when it names a lane |
+| **Follow-up agent** | Post-visit check-ins and adherence reminders. It **cannot write to a patient in its own words** — it picks one of four approved templates and supplies the values. A clinic can review four templates; it cannot review every sentence a model might generate |
+| **Document Q&A agent** | Answers from the clinic's own documents over pgvector, citing the passage each claim came from. Citations are assembled by the gateway out of the row it returned, so the agent can only repeat a handle, never invent one |
+| **Verified citations** | The loop refuses an answer citing a passage that run never retrieved, and hands the objection back for one correction before escalating. Mechanical — a subset test, no model call, no tokens |
+| **Retrieval that can say no** | Nearest-neighbour search always returns neighbours, so a score floor drops passages sharing no vocabulary with the question. "The documents do not cover this" is a first-class answer rather than a failure |
 
-### Still fixture data
+### Honest about the embedder
 
-The KPI tiles, agent cards (task counts, success rates, cost/task) and the Live
-activity feed render from `apps/web/src/data/mock.ts`. Only the Trace Viewer and
-task creation are wired to the backend.
+Retrieval is **lexical, not semantic** — feature hashing over words and bigrams,
+not a dense embedding model ([ADR-009](./docs/adr/ADR-009-lexical-embeddings-behind-an-interface.md)).
+Anthropic serves no embeddings API, the documented route is a second vendor, and
+this project has one key; shipping a client nobody can execute is the mistake
+[ADR-003](./docs/adr/ADR-003-provider-fallback.md) already declined once.
+
+So a query matches when it shares vocabulary with a passage, and the agent is
+told that in as many words so it can search again with the words a policy
+document would use. `Embedder` is a Protocol — a real provider drops in without
+the ingest path, the search path, the gateway contract or the schema changing.
+
+A retrieval eval over the shipped corpus runs in CI with no database and no
+network: 18 real patient questions, top-1 accuracy 18/18. It is also what caught
+the first version being wrong — see `10-LESSONS.md`.
 
 ### Not built yet
 
-**The loop is closed and governed** — sign in, type a message, the agent runs,
-the appointment moves, and every step of it is audited under a tenant that
-Postgres enforces. What is left is breadth:
+**The loop is closed, governed and routed** — sign in, type a message, the
+orchestrator picks an agent or a human, the agent runs, and every step of it is
+audited under a tenant Postgres enforces. What is left is breadth:
 
 n8n workflows (n8n is in the stack at :5678 but no workflow is wired to an
-agent) · Follow-up and Document Q&A agents · analytics and evals · Stripe and
-quotas · deployment.
+agent, so a follow-up message is recorded `drafted` and nothing delivers it) ·
+an `escalations` table and human queue screen (escalation *fires* from three
+places; nobody is notified) · analytics and evals · Stripe and quotas ·
+deployment.
 
 Known sharp edges, all tracked in [`09-TODO.md`](./09-TODO.md) and
 [`SECURITY.md`](./SECURITY.md): the enqueue sits just outside the task's
 transaction, so a Redis outage in that window leaves a task needing a manual
-nudge; the JWT lives in `localStorage` rather than an httpOnly cookie, which is
-a real XSS exposure and is Phase 5 work alongside TLS; and the RLS isolation
-checks are verified by hand rather than in CI.
+nudge; and the JWT lives in `localStorage` rather than an httpOnly cookie, which
+is a real XSS exposure and is Phase 5 work alongside TLS.
 
 See [`09-TODO.md`](./09-TODO.md) for the live checklist and
 [`10-LESSONS.md`](./10-LESSONS.md) for what broke along the way.

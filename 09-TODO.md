@@ -175,21 +175,49 @@ the auth that Phase 2 owns anyway.
 - [ ] Team & Invitations UI (invite by email, per-org role, pending invites)
 - [ ] ✅ Gate (SaaS MVP): signup → org → Free plan → hit quota → Stripe Checkout (test) → quota lifts, live
 
-## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~30% — the safety layer is in**
+## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~85% — the fleet is complete**
 
 Taken safety-first rather than agents-first: redaction, fallback and the
 self-check all wrap the *existing* agent, so each one is independently
-valuable and none of them waits on the other two agents existing.
-- [ ] Follow-up Agent: n8n scheduled sequence + templated check-ins
-- [ ] Document Q&A: doc ingest → chunk → embed → `embeddings` (pgvector)
-- [ ] RAG retrieval + answers **with citations**
-- [ ] Orchestrator: route task → correct agent (routing pattern)
-- [ ] Hand-off/escalation: confidence/scope check → `escalations` + queue UI
+valuable and none of them waits on the other two agents existing. As of
+2026-08-12 all three agents are deployed and the orchestrator routes to them —
+`/health` reports the router's lanes and the registry as the same set, which is
+the first time that has been true.
+- [~] Follow-up Agent: n8n scheduled sequence + templated check-ins — the
+      templates are built and governed (four approved messages; the agent
+      cannot write to a patient in its own words). The **n8n scheduled
+      sequence is not** — a message is recorded as `drafted` and nothing
+      delivers it, which the `message_status` enum says out loud rather than
+      claiming `sent`
+- [x] Document Q&A: doc ingest → chunk → embed → `document_chunks` (pgvector) —
+      heading-aware chunking, `python -m app.rag.ingest --demo`, 6 documents
+      and 43 passages per clinic. Opening hours differ per clinic so tenant
+      isolation is something the demo shows rather than asserts
+- [x] RAG retrieval + answers **with citations** — citations are assembled by
+      the gateway from the row it returned, never accepted from the agent, and
+      the loop refuses an answer citing a passage the run never retrieved
+      (ADR-009 for why the embedder is lexical, and what that costs)
+- [x] Orchestrator: route task → correct agent (routing pattern) — one cheap
+      model call that picks a lane **or refuses to**. Anything clinical,
+      urgent, or unplaceable escalates; the parser reads only the first bare
+      word, so a hedging paragraph escalates even when it names a lane
+- [ ] Hand-off/escalation: confidence/scope check → `escalations` + queue UI —
+      the *check* exists three times over (router escalation, non-convergence,
+      failed answer check) and each ends the task as `escalated`. What is
+      missing is the `escalations` table and the human queue screen: today an
+      escalated task sits in the Task Inbox with that status and nobody is
+      told
 - [x] Reflection/self-check before high-stakes FHIR writes — the same model
       in a *fresh* context, given the observations rather than the
       conversation. Fails closed on an unparseable verdict; a block is fed back
       as an error result the model can correct from, not an abort. Traced as
-      its own `reflection` kind and costed like any other call
+      its own `reflection` kind and costed like any other call.
+      **Extended 2026-08-12** to a mechanical check on the Document Q&A
+      agent's *answer* — it writes nothing, so there is no tool call to
+      intercept and its whole risk is the sentence it produces. Same trace
+      kind, because both are the system declining to take the agent's word
+      for it; no tokens, because this one is a subset test rather than a
+      judgement
 - [x] Model fallback behind the provider interface (ADR-003) — Sonnet then
       Haiku, not Claude then OpenAI. `FallbackProvider` takes any
       `LlmProvider` so OpenAI drops in unchanged, but there is no key to test
@@ -200,11 +228,19 @@ valuable and none of them waits on the other two agents existing.
       pseudonyms; dates and FHIR ids deliberately survive, because redacting
       them would break the agent while looking like caution. Short of Safe
       Harbor and says so
-- [~] Test: escalation fires; fallback triggers on simulated failure —
-      both covered (escalation since Phase 1, fallback with synthetic SDK
-      errors). Still to add: a test that the *orchestrator* escalates on an
-      out-of-scope request, which needs the orchestrator
-- [ ] ✅ Gate: 3 agents deployable, routing + hand-off + fallback work
+- [x] Test: escalation fires; fallback triggers on simulated failure —
+      escalation covered from three directions now (router refusal,
+      non-convergence, an answer that cannot be verified), fallback with
+      synthetic SDK errors, and the orchestrator's out-of-scope escalation
+      that was outstanding here
+- [ ] ✅ Gate: 3 agents deployable, routing + hand-off + fallback work —
+      **not claimed.** All three agents run, routing works, escalation works,
+      and the whole retrieval path was exercised live against the gateway and
+      a real pgvector database. What has *not* happened is an end-to-end run
+      against a real model: the `ANTHROPIC_API_KEY` in `.env` returns 401.
+      Everything below the model call is verified; the model call is not.
+      (The 401 did confirm one thing by accident — `FallbackProvider` did not
+      retry it, which is ADR-003's rule that 4xx never fails over)
 
 ## Phase 4 — Analytics, Observability & Polish
 - [ ] Analytics: tasks/day, success vs escalation per agent (Recharts)

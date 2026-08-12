@@ -87,6 +87,87 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 
 ### Running log
 
+#### 2026-08-12 — The eval resized the vectors, and a nonsense query scored higher than a right answer
+- Phase: 3
+- Context: Building agent three of three — Document Q&A over pgvector, answering
+  from clinic documents with a citation on every claim. Anthropic serves no
+  embeddings API, so the decision was an `Embedder` Protocol with one honest
+  local implementation (feature hashing) rather than a Voyage client nobody
+  could execute — the same argument ADR-003 made about OpenAI. Written up as
+  [ADR-009](./docs/adr/ADR-009-lexical-embeddings-behind-an-interface.md).
+- **Problems / what surprised me:**
+  - **I sized the vector like a model, not like a hash table.** 384 dimensions,
+    because that is what `all-MiniLM-L6-v2` produces and the number felt
+    familiar. That is the wrong instinct entirely: with feature hashing the
+    dimension is a **collision budget**, not a property of a model. With ~60
+    distinct terms in a chunk and 384 buckets, the chance a given query term
+    collides with something in a short passage is around 15%.
+  - **And it was not theoretical.** The retrieval eval I wrote — 18 real patient
+    questions against the real corpus — failed on two of them immediately. "How
+    do I cancel my appointment" ranked a *chaperones* passage above the
+    cancellation policy, because one query term collided with one term in a
+    short chunk, and short chunks have large per-term weights after
+    normalisation. Measured: top-1 is 16/18 at 384 and 512, 18/18 from 768 up.
+    Moved to 1024 — the next power of two, with headroom, and the width of the
+    obvious real model to swap in, which turns that swap into a re-ingest
+    instead of a migration.
+  - **A nonsense query outscored a correct one.** Live against the gateway,
+    "what were last season's football results" scores **0.18** against the
+    test-results document — while "how much notice to cancel an appointment"
+    scores **0.17** against exactly the right passage. Both are "correct" cosine
+    similarities. They are simply not comparable across queries, because the
+    score depends on how many terms each side has as much as on overlap. Any
+    plan to use an absolute threshold as a relevance test was wrong, and I would
+    have shipped it believing otherwise if I had not printed the numbers.
+  - **Nearest-neighbour search always returns neighbours.** Before adding a
+    floor, asking something the corpus does not cover returned five passages —
+    simply the least irrelevant ones — with nothing marking them as such. That
+    is a confident wrong answer with no bug anywhere in it. A `minScore` floor
+    fixes the zero-overlap case, and *only* that case. Given the 0.18-vs-0.17
+    finding, what actually prevents a bad answer is the prompt's instruction to
+    decline and the citation check, not the number.
+- What worked:
+  - **Writing the eval before trusting the design.** It is 18 parameterised
+    cases, ranks in plain Python so it needs no database, and runs in CI. It
+    tests something no unit test can — whether this embedder is strong enough
+    for the documents this project actually ships. It found the collision bug
+    within a minute of existing, and it is the thing that will fail if someone
+    rewrites a document in vocabulary nobody searches with.
+  - **A migration that a comment predicted.** `0006` says in a comment that
+    changing embedding model means "a migration *and* a re-ingest". `0007` is
+    that, two commits later. I kept it as a second migration rather than
+    rewriting the first, because the sequence is the evidence the design
+    anticipated its own change.
+  - **Checking the answer, not the action.** The other two agents do damage
+    through a `mutates` tool, which the pre-write self-check stands in front of.
+    This one writes nothing — its risk is the sentence. So the loop learned an
+    optional `check_answer`, and Document Q&A's is a subset test: every citation
+    must be one the gateway actually returned this run. No model call, no
+    judgement, no tokens. A failure is handed back for one correction and then
+    escalates, reusing the same recovery path a failing tool already had.
+  - Being explicit about what that check does **not** buy: it does not verify
+    every claim has a citation, or that the passage supports the claim. An
+    answer with no citations passes, deliberately — "the documents do not cover
+    this" is a correct answer with nothing to cite, and requiring one would make
+    the honest refusal the single thing this agent could not say.
+- **A test caught a hole in a boundary I had just written.** The stemmer stripped
+  "ing" from anything over four letters, which turns "bring" into "br" — a
+  two-letter fragment colliding with everything. Guards now put the shortest
+  stem at four characters, "ies" is rewritten rather than stripped so "policies"
+  reaches "policy", and past tense is left alone entirely because "cancelled"
+  stems to "cancell" and still misses "cancel", so the rule buys nothing.
+- What I'd do differently: print the actual similarity numbers on day one. Every
+  wrong belief in this session — the dimension, the threshold, the idea that a
+  score means relevance — survived exactly as long as I was reasoning about
+  retrieval instead of measuring it.
+- Interview soundbite: *"I sized a feature-hashing vector at 384 because that is
+  a familiar embedding width, which is the wrong instinct — there the dimension
+  is a collision budget, not a model property. A retrieval eval over the real
+  corpus caught it: top-1 accuracy was 16/18 at 384 and 18/18 at 768, so I moved
+  to 1024 and shipped the migration my own schema comment had predicted. The
+  same eval showed a nonsense query scoring 0.18 where a correct answer scored
+  0.17, which killed any idea of using an absolute score as a relevance test."*
+
 #### 2026-07-29 — Phase 0 close-out: the gate was never actually green
 - Phase: 0
 - Context: Picked the project back up after a 26-day gap to audit real status against
@@ -662,6 +743,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-07-29 | AI service calls FHIR directly | **Gateway owns FHIR access (ADR-008)** | Optimistic concurrency should exist once, PHI access must be auditable in one place, and the throwaway Python adapter had already written a malformed `Slot/Slot/…` reference the TypeScript client would not have |
 | 2026-07-29 | KPI tiles show business outcomes (no-show rate, calls deflected) | **Operational metrics only** — tasks, outcomes, spend, tokens | Those figures came from the design-phase mock and nothing in the product measures them. Small honest numbers beat impressive invented ones; the business KPIs return in Phase 4 when a baseline exists to compute a delta against |
 | 2026-07-29 | TanStack Query for data fetching (on the stack list since Phase 0) | **A ~30-line `useApi` hook** | ~13 KB for cache invalidation and refetch policies that no current screen needs — every page loads once and refreshes on an explicit action. Swap it in when a screen actually needs a cache |
+| 2026-08-12 | Embedding vectors at 384 dimensions | **1024** | 384 was chosen because it is a familiar sentence-transformer width. With feature hashing the dimension is a collision budget, not a model property: a retrieval eval over the real corpus put a chaperones passage above the cancellation policy on one collision. Top-1 went 16/18 → 18/18 at 768; 1024 is the next power of two and the width of the model most likely to replace it |
+| 2026-08-12 | A score threshold would tell relevant results from irrelevant ones | **A noise floor only; the prompt and the citation check do the real work** | Measured: a nonsense query scored 0.18 against the test-results document while a correct match scored 0.17. Cosine similarity over sparse vectors is comparable within one search, not across queries |
 
 ---
 
@@ -669,9 +752,10 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **387 tests** (202 TypeScript unit, 14 TypeScript
-  integration, 171 Python) — the 304 previously recorded here was an addition
-  error; 201 + 14 + 99 is 314; coverage % not yet measured — wire `test:cov` thresholds in Phase 6.
+  postgres, redis, n8n) across 5 workspaces. **555 tests** (215 TypeScript unit,
+  44 TypeScript integration, 296 Python). Counted by running each suite rather
+  than by adding up remembered numbers, which is how the figure here was wrong
+  twice; coverage % still not measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%
@@ -679,8 +763,11 @@ Fill these in by launch — concrete numbers make the portfolio post land.
 - [ ] p95 task latency (excl. LLM) — *per-step latency is captured; not yet aggregated*
 - [~] **# of FHIR resource types integrated** — **5 live**: Patient, Practitioner,
   Schedule, Slot, Appointment (read, write, and version-checked update)
-- [~] **# agents shipped** — **1 of 3 working** (Scheduling). Follow-up and
-  Document Q&A are seeded `paused`; 0 n8n workflows so far
+- [~] **# agents shipped** — **3 of 3 deployed** (Scheduling, Follow-up,
+  Document Q&A), behind an orchestrator that routes to them or refuses and hands
+  to a human. Scheduling is the only one proven end to end against a live model;
+  0 n8n workflows so far, so a follow-up message is recorded `drafted` and
+  nothing delivers it
 - [ ] Eval scores (agent correctness before/after prompt iterations)
 - [~] **Build time** — Phase 0 spanned 2026-07-03 → 2026-07-29 across 2 working
   sessions (26 elapsed days, ~1 day of actual work; the gap is the honest number
