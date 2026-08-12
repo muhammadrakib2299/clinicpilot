@@ -324,6 +324,123 @@ export interface MessageSummary {
   createdAt: string;
 }
 
+// ── Documents and retrieval ─────────────────────────────────────────────────
+//
+// The AI service chunks and embeds; the gateway stores and searches. The split
+// is not arbitrary: embedding has to produce *identical* vectors at ingest and
+// at query time, and two implementations in two languages is exactly the
+// arrangement that wrote a malformed `Slot/Slot/…` reference in Phase 1.
+
+/**
+ * A vector on the wire.
+ *
+ * The length check is the whole point of validating this at all. Postgres
+ * rejects a wrong-length vector too, but at INSERT, after a document has been
+ * read, chunked and embedded, and with a driver error that says nothing about
+ * which side is wrong.
+ */
+const Embedding = z
+  .array(z.number().finite())
+  .length(
+    EMBEDDING_DIMENSIONS,
+    `an embedding must have exactly ${EMBEDDING_DIMENSIONS} dimensions — a different length means the AI service and the schema disagree about the model`,
+  );
+
+/**
+ * Which embedder produced a vector.
+ *
+ * Carried on ingest *and* on search, and search filters by it. Cosine distance
+ * between vectors from two different models is not an error — it is a
+ * plausible float, so retrieval would keep returning rows and keep being wrong.
+ */
+const EmbeddingModel = z.string().trim().min(1).max(100);
+
+/** One passage as it crosses the wire. */
+export const IngestChunkInput = z.object({
+  ordinal: z.number().int().positive(),
+  heading: z.string().max(300).nullish(),
+  text: z.string().min(1).max(8000),
+  embedding: Embedding,
+});
+export type IngestChunkInput = z.infer<typeof IngestChunkInput>;
+
+/**
+ * Body of `POST internal/documents`.
+ *
+ * Ingest replaces a document rather than appending to it: re-running it after
+ * an edit must not leave the old passages behind for the retriever to rank
+ * against the new ones. `slug` is what makes that identity work, so it is
+ * constrained to something safe to print inside a citation.
+ */
+export const IngestDocumentInput = z.object({
+  slug: z
+    .string()
+    .trim()
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "a slug is lowercase words joined by single hyphens, e.g. 'opening-hours' — it is shown to patients inside citations",
+    )
+    .max(80),
+  title: z.string().trim().min(1).max(200),
+  source: z.string().trim().max(500).nullish(),
+  embeddingModel: EmbeddingModel,
+  chunks: z.array(IngestChunkInput).min(1).max(1000),
+});
+export type IngestDocumentInput = z.infer<typeof IngestDocumentInput>;
+
+/**
+ * How similar a passage must be to come back at all.
+ *
+ * Nearest-neighbour search always returns neighbours. Without a floor, a
+ * question the corpus does not cover still yields the configured number of
+ * passages — they are simply the least irrelevant ones — and the model is then
+ * holding five plausible-looking documents and a question it cannot answer
+ * from them. That is the standard way a retrieval system produces a confident
+ * wrong answer, and it needs no bug to happen.
+ *
+ * 0.05 discards passages that share essentially no vocabulary with the query.
+ * It is a noise floor, not a relevance guarantee: clearing it means a passage
+ * has *something* in common, not that it answers anything.
+ */
+const DEFAULT_MIN_SCORE = 0.05;
+
+/** Body of `POST internal/documents/search`. */
+export const SearchDocumentsInput = z.object({
+  embedding: Embedding,
+  embeddingModel: EmbeddingModel,
+  /** Capped: every chunk returned lands in the model's context window. */
+  limit: z.coerce.number().int().positive().max(20).default(5),
+  minScore: z.coerce.number().min(0).max(1).default(DEFAULT_MIN_SCORE),
+});
+export type SearchDocumentsInput = z.infer<typeof SearchDocumentsInput>;
+
+/**
+ * One retrieved passage.
+ *
+ * `citation` is `slug#ordinal` — assembled by the gateway rather than by the
+ * agent, so the only citations in existence are ones that came back from a
+ * real row. That is what makes verifying an answer's citations meaningful.
+ */
+export interface RetrievedChunk {
+  citation: string;
+  documentTitle: string;
+  heading: string | null;
+  text: string;
+  /** Cosine similarity in [-1, 1]; 1 is identical. */
+  score: number;
+}
+
+/** What `GET /api/documents` returns — the corpus, without its vectors. */
+export interface DocumentSummary {
+  id: string;
+  slug: string;
+  title: string;
+  source: string | null;
+  chunkCount: number;
+  embeddingModel: string | null;
+  updatedAt: string;
+}
+
 /**
  * What the gateway returns for an appointment.
  *

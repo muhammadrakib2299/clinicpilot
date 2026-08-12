@@ -4,11 +4,14 @@ import {
   Agent,
   AgentKind,
   AgentStatus,
+  EMBEDDING_DIMENSIONS,
   FhirId,
   FindAppointmentsQuery,
   FindFreeSlotsQuery,
+  IngestDocumentInput,
   PlanCode,
   RescheduleAppointmentInput,
+  SearchDocumentsInput,
   TaskChannel,
   TaskStatus,
   TraceKind,
@@ -269,5 +272,78 @@ describe("RescheduleAppointmentInput", () => {
     expect(
       RescheduleAppointmentInput.safeParse({ ...valid, end: valid.start }).success,
     ).toBe(false);
+  });
+});
+
+describe("document ingest and search contracts", () => {
+  const vector = Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0.1);
+
+  const document = {
+    slug: "opening-hours",
+    title: "Opening hours",
+    embeddingModel: "hashing-v1-384",
+    chunks: [{ ordinal: 1, heading: "Weekdays", text: "We open at eight.", embedding: vector }],
+  };
+
+  it("accepts a well-formed document", () => {
+    expect(IngestDocumentInput.safeParse(document).success).toBe(true);
+  });
+
+  it("rejects a vector of the wrong length, naming both sides", () => {
+    // Postgres would reject it too, but only at INSERT — after the document
+    // has been read, chunked and embedded, with a driver error that says
+    // nothing about which end disagrees.
+    const result = IngestDocumentInput.safeParse({
+      ...document,
+      chunks: [{ ...document.chunks[0], embedding: vector.slice(0, 128) }],
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toContain(String(EMBEDDING_DIMENSIONS));
+    }
+  });
+
+  it("rejects a non-finite value in a vector", () => {
+    // NaN propagates through cosine distance and orders results arbitrarily
+    // rather than failing, so it must not reach the column.
+    const poisoned = [...vector];
+    poisoned[0] = Number.NaN;
+
+    expect(
+      IngestDocumentInput.safeParse({
+        ...document,
+        chunks: [{ ...document.chunks[0], embedding: poisoned }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(["Opening Hours", "opening_hours", "opening--hours", "-opening", "hours-"])(
+    "rejects %p as a slug",
+    (slug) => {
+      // The slug is half of a citation the patient may be shown, so it is
+      // constrained to something safe to print rather than sanitised later.
+      expect(IngestDocumentInput.safeParse({ ...document, slug }).success).toBe(false);
+    },
+  );
+
+  it("requires at least one chunk", () => {
+    // A document with no passages is invisible to retrieval, so accepting one
+    // would mean ingest reporting success for something that answers nothing.
+    expect(IngestDocumentInput.safeParse({ ...document, chunks: [] }).success).toBe(false);
+  });
+
+  it("defaults the search limit, and caps it", () => {
+    const query = { embedding: vector, embeddingModel: "hashing-v1-384" };
+
+    expect(SearchDocumentsInput.parse(query).limit).toBe(5);
+    // Every chunk returned lands in the model's context window.
+    expect(SearchDocumentsInput.safeParse({ ...query, limit: 50 }).success).toBe(false);
+  });
+
+  it("requires the model that produced the query vector", () => {
+    // Without it the gateway cannot filter, and vectors from two different
+    // embedders compare to a perfectly ordinary-looking number.
+    expect(SearchDocumentsInput.safeParse({ embedding: vector }).success).toBe(false);
   });
 });
