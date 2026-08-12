@@ -9,48 +9,21 @@ That boundary is not bureaucracy. The Python adapter this replaced wrote a
 malformed `Slot/Slot/137240396` reference onto a live appointment, which HAPI
 accepted, because it was a second implementation of rules that already existed
 in TypeScript.
+
+The HTTP plumbing — base URL, service token, tenant header, error translation —
+lives in `app/gateway.py`, shared with the documents surface.
 """
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
-import httpx
+from app.gateway import DEFAULT_API_URL, GatewayClient, GatewayError, explain
 
-DEFAULT_API_URL = "http://localhost:8080"
-
-
-class GatewayError(Exception):
-    """The gateway refused or could not serve a FHIR request.
-
-    Raised into the agent loop, which turns it into an error `tool_result` the
-    model reads and recovers from — so the message is load-bearing, not just
-    something for a log. It carries the gateway's own explanation, which in
-    turn carries the FHIR server's `OperationOutcome` diagnostics.
-    """
+__all__ = ["DEFAULT_API_URL", "GatewayError", "GatewayFhir", "explain"]
 
 
-class GatewayFhir:
-    def __init__(
-        self,
-        *,
-        tenant_id: str | None = None,
-        base_url: str | None = None,
-        client: httpx.Client | None = None,
-        timeout: float = 30.0,
-    ) -> None:
-        self.tenant_id = tenant_id
-        self.base_url = (base_url or os.environ.get("API_URL") or DEFAULT_API_URL).rstrip("/")
-        self._client = client or httpx.Client(timeout=timeout)
-        self._owns_client = client is None
-
-    def _headers(self) -> dict[str, str]:
-        headers = {"x-service-token": os.environ.get("SERVICE_TOKEN", "")}
-        if self.tenant_id:
-            headers["x-tenant-id"] = self.tenant_id
-        return headers
-
+class GatewayFhir(GatewayClient):
     def find_appointments(
         self,
         *,
@@ -110,9 +83,10 @@ class GatewayFhir:
     ) -> dict[str, Any]:
         """Record an outbound follow-up.
 
-        Not FHIR — a ClinicPilot record — but it goes through the same gateway
-        client because it needs the same service token and tenant header, and a
-        second class for one endpoint means two places to keep those in step.
+        Not FHIR — a ClinicPilot record — but it stays on this class because it
+        is about a patient and their appointment, which is what every other
+        method here is about. Moving it to the documents surface would put it
+        next to clinic policies, which it has nothing to do with.
         """
         payload: dict[str, Any] = {
             "patientRef": patient_ref,
@@ -125,49 +99,3 @@ class GatewayFhir:
             payload["taskId"] = task_id
 
         return self._request("POST", "/api/internal/messages", json=payload)
-
-    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
-        try:
-            response = self._client.request(
-                method, f"{self.base_url}{path}", headers=self._headers(), **kwargs
-            )
-        except httpx.HTTPError as exc:
-            raise GatewayError(f"could not reach the API gateway: {exc}") from exc
-
-        if response.status_code >= 400:
-            raise GatewayError(explain(response))
-
-        return response.json()
-
-    def close(self) -> None:
-        if self._owns_client:
-            self._client.close()
-
-
-def explain(response: httpx.Response) -> str:
-    """Turn a gateway error response into a sentence a model can act on.
-
-    Field-level validation issues are flattened into the message rather than
-    left in a nested array: the model sees this as one string, and "which
-    field" is the part that tells it what to change.
-    """
-    try:
-        body = response.json()
-    except ValueError:
-        return f"{response.status_code} {response.text[:200]}".strip()
-
-    if not isinstance(body, dict):
-        return f"{response.status_code} {body}"
-
-    message = body.get("message") or body.get("error") or f"HTTP {response.status_code}"
-
-    issues = body.get("issues")
-    if isinstance(issues, list) and issues:
-        detail = "; ".join(
-            f"{issue.get('path', '?')}: {issue.get('message', '')}".strip()
-            for issue in issues
-            if isinstance(issue, dict)
-        )
-        return f"{message} — {detail}"
-
-    return str(message)
