@@ -87,6 +87,51 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 
 ### Running log
 
+#### 2026-08-12 — Escalation had worked for weeks and told nobody
+- Phase: 3
+- Context: Closing the last Phase 3 item — the `escalations` table and the human
+  queue screen. Escalation itself was already built three times over: the router
+  refuses to route, the loop gives up after eight iterations, an answer that
+  cites a passage it never read is not delivered.
+- **Problem:** all three did the same thing at the end — set the task's status to
+  `escalated` and stop. Nothing was notified, nothing was assigned, and nothing
+  recorded whether a person ever looked. The feature was *correct and useless*,
+  which is a worse failure mode than broken: broken gets noticed. It looked
+  finished in the TODO, in the trace viewer, and in the tests.
+- **The design call that mattered:** the queue row is written by the **gateway**,
+  inside the same transaction that marks the task escalated — not by the AI
+  service in a second call. Escalation already fires from three places and will
+  fire from more, and a caller that has to remember a second request is one that
+  will eventually forget. The symptom of forgetting would be a patient's message
+  nobody hears about, which is precisely what the table exists to prevent.
+  So the AI service supplies the *reason* and cannot supply the row's existence,
+  and `unspecified` is a valid reason for exactly that purpose. There is a test
+  called "queues even when the caller does not say why".
+- Same shape as three earlier decisions in this codebase, and I noticed the
+  pattern only writing it down: RLS enrolled per table by hand but asserted by a
+  list the suite iterates; one global auth guard so a new controller is closed
+  by default; redaction as a provider decorator rather than a loop step. Each
+  one moves a thing from "remember to do it" to "cannot avoid it".
+- **What worked:** requiring a note to resolve. It is one `z.string().min(1)` and
+  it is the difference between a queue that is tidy and a queue that answers
+  "what happened to this patient's message" six months later. The note is copied
+  into `audit_log` as well, because `escalations.resolution` is an ordinary
+  updatable column and the audit entry is the copy nobody can rewrite.
+- Claiming reuses the concurrency shape from `markRunning`: read, then guard the
+  same condition in the UPDATE, because two coordinators can both pass the read
+  before either writes. The loser gets a 409 naming the reason rather than a
+  silent no-op that looks like success.
+- What I'd do differently: build the queue in the same session as the first
+  escalation path. Shipping the *check* without the *destination* let three
+  features look complete while sharing one hole, and each one made the hole
+  cheaper to keep ignoring.
+- Interview soundbite: *"Escalation worked from three different code paths and
+  every one of them ended by setting a status nobody watched — correct and
+  useless. I moved the queue write into the gateway's task-completion
+  transaction so no agent path can escalate without queueing: the agent supplies
+  the reason and cannot supply the row's existence, and there is a test asserting
+  a run that fails to categorise itself still reaches a human."*
+
 #### 2026-08-12 — The eval resized the vectors, and a nonsense query scored higher than a right answer
 - Phase: 3
 - Context: Building agent three of three — Document Q&A over pgvector, answering
@@ -745,6 +790,7 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-07-29 | TanStack Query for data fetching (on the stack list since Phase 0) | **A ~30-line `useApi` hook** | ~13 KB for cache invalidation and refetch policies that no current screen needs — every page loads once and refreshes on an explicit action. Swap it in when a screen actually needs a cache |
 | 2026-08-12 | Embedding vectors at 384 dimensions | **1024** | 384 was chosen because it is a familiar sentence-transformer width. With feature hashing the dimension is a collision budget, not a model property: a retrieval eval over the real corpus put a chaperones passage above the cancellation policy on one collision. Top-1 went 16/18 → 18/18 at 768; 1024 is the next power of two and the width of the model most likely to replace it |
 | 2026-08-12 | A score threshold would tell relevant results from irrelevant ones | **A noise floor only; the prompt and the citation check do the real work** | Measured: a nonsense query scored 0.18 against the test-results document while a correct match scored 0.17. Cosine similarity over sparse vectors is comparable within one search, not across queries |
+| 2026-08-12 | Escalation is done when the agent stops and sets a status | **Done when a person is told, and the queue write is not the agent's job** | Three escalation paths all ended by setting `tasks.status = 'escalated'` and nothing watched it — correct and useless. The row is now written by the gateway inside the task-completion transaction, so no agent path can escalate without queueing |
 
 ---
 
@@ -752,8 +798,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **555 tests** (215 TypeScript unit,
-  44 TypeScript integration, 296 Python). Counted by running each suite rather
+  postgres, redis, n8n) across 5 workspaces. **611 tests** (226 TypeScript unit,
+  62 TypeScript integration, 299 Python). Counted by running each suite rather
   than by adding up remembered numbers, which is how the figure here was wrong
   twice; coverage % still not measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on

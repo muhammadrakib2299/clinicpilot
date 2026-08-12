@@ -123,7 +123,9 @@ the auth that Phase 2 owns anyway.
       **met 2026-07-29**, 3 iterations, 9 steps, $0.0153, appointment moved on HAPI
 
 ### Still fixture in the UI
-- [ ] Org switcher, search box (⌘K), notifications bell — chrome with no backing
+- [ ] Search box (⌘K), notifications bell — chrome with no backing. The org
+      switcher is real (Phase 2); the bell is the one that now has something
+      to point at, since the human queue exists for it to notify about
 - [ ] Sidebar persona "Priya Nair" — labelled `Admin · demo`; real once auth lands
 
 ## Phase 2 — Multi-tenancy, RBAC & Audit ✅ **COMPLETE** (closed out 2026-08-11)
@@ -175,7 +177,7 @@ the auth that Phase 2 owns anyway.
 - [ ] Team & Invitations UI (invite by email, per-org role, pending invites)
 - [ ] ✅ Gate (SaaS MVP): signup → org → Free plan → hit quota → Stripe Checkout (test) → quota lifts, live
 
-## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~85% — the fleet is complete**
+## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~95% — n8n is all that is left**
 
 Taken safety-first rather than agents-first: redaction, fallback and the
 self-check all wrap the *existing* agent, so each one is independently
@@ -201,12 +203,15 @@ the first time that has been true.
       model call that picks a lane **or refuses to**. Anything clinical,
       urgent, or unplaceable escalates; the parser reads only the first bare
       word, so a hedging paragraph escalates even when it names a lane
-- [ ] Hand-off/escalation: confidence/scope check → `escalations` + queue UI —
-      the *check* exists three times over (router escalation, non-convergence,
-      failed answer check) and each ends the task as `escalated`. What is
-      missing is the `escalations` table and the human queue screen: today an
-      escalated task sits in the Task Inbox with that status and nobody is
-      told
+- [x] Hand-off/escalation: confidence/scope check → `escalations` + queue UI —
+      the check fires from three places (router refusal, non-convergence, an
+      answer that could not be verified) and each now lands in a queue a person
+      works. **The row is written by the gateway**, in the same transaction
+      that marks the task escalated, so no agent path can escalate without
+      queueing; the AI service supplies the reason and cannot supply the row's
+      existence. Claiming is guarded against two people taking the same one,
+      resolving requires a note, and the note is copied into `audit_log`
+      because that is the copy nobody can edit
 - [x] Reflection/self-check before high-stakes FHIR writes — the same model
       in a *fresh* context, given the observations rather than the
       conversation. Fails closed on an unparseable verdict; a block is fed back
@@ -234,9 +239,12 @@ the first time that has been true.
       synthetic SDK errors, and the orchestrator's out-of-scope escalation
       that was outstanding here
 - [ ] ✅ Gate: 3 agents deployable, routing + hand-off + fallback work —
-      **not claimed.** All three agents run, routing works, escalation works,
-      and the whole retrieval path was exercised live against the gateway and
-      a real pgvector database. What has *not* happened is an end-to-end run
+      **not claimed, and one thing away from it.** All three agents run,
+      routing works, hand-off now lands in a queue a person works, and both
+      the retrieval path and the full escalation lifecycle were exercised live
+      — against a real pgvector database and over HTTP with real roles (viewer
+      reads 200 and cannot act, 403; a second claim 409s; a blank resolution
+      is refused by name). What has *not* happened is an end-to-end run
       against a real model: the `ANTHROPIC_API_KEY` in `.env` returns 401.
       Everything below the model call is verified; the model call is not.
       (The 401 did confirm one thing by accident — `FallbackProvider` did not
