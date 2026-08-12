@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from datetime import date
 
 from app.agents import orchestrator
+from app.agents.docqa import DOCQA_TOOLS
+from app.agents.docqa import SYSTEM_PROMPT as DOCQA_PROMPT
+from app.agents.docqa_executor import make_docqa_executor
 from app.agents.followup import FOLLOWUP_TOOLS
 from app.agents.followup import SYSTEM_PROMPT as FOLLOWUP_PROMPT
 from app.agents.followup_executor import make_followup_executor
@@ -28,6 +31,8 @@ from app.llm.fallback_provider import FallbackProvider
 from app.llm.pricing import cost_usd
 from app.llm.provider import LlmProvider, ToolDefinition
 from app.llm.redacting_provider import RedactingProvider
+from app.rag.embedding import Embedder, HashingEmbedder
+from app.rag.gateway import GatewayDocuments
 from app.safety.redaction import Redactor
 
 DEFAULT_CLINIC_NAME = "your clinic"
@@ -46,6 +51,8 @@ class ExecutorContext:
     """What an executor needs beyond its tool definitions."""
 
     fhir: GatewayFhir
+    documents: GatewayDocuments
+    embedder: Embedder
     clinic_name: str
     task_id: str
 
@@ -75,10 +82,12 @@ AGENTS: dict[str, AgentSpec] = {
             ctx.fhir, clinic_name=ctx.clinic_name, task_id=ctx.task_id
         ),
     ),
-    # `docqa` is in the seeded fleet and the router can name it, but it is
-    # absent here on purpose: it is not built. A task routed to an agent this
-    # service cannot run escalates, rather than being quietly handled by
-    # whichever agent happened to be nearest.
+    "docqa": AgentSpec(
+        kind="docqa",
+        system=DOCQA_PROMPT,
+        tools=DOCQA_TOOLS,
+        build_executor=lambda ctx: make_docqa_executor(ctx.documents, ctx.embedder),
+    ),
 }
 
 
@@ -91,6 +100,8 @@ def run_task(
     clinic_name: str = DEFAULT_CLINIC_NAME,
     provider: LlmProvider | None = None,
     fhir: GatewayFhir | None = None,
+    documents: GatewayDocuments | None = None,
+    embedder: Embedder | None = None,
     sink: GatewayTraceSink | None = None,
     priced_on: date | None = None,
     redact: bool = True,
@@ -116,6 +127,11 @@ def run_task(
 
     owned_fhir = fhir is None
     fhir = fhir or GatewayFhir(tenant_id=tenant_id)
+    owned_documents = documents is None
+    documents = documents or GatewayDocuments(tenant_id=tenant_id)
+    # Cheap to construct and holds no connection, so it is not worth the
+    # branching to build one only for the agent that uses it.
+    embedder = embedder or HashingEmbedder()
     owned_sink = sink is None
     sink = sink or GatewayTraceSink(task_id, tenant_id=tenant_id)
     priced_on = priced_on or date.today()
@@ -149,7 +165,13 @@ def run_task(
                     f"Available: {', '.join(sorted(AGENTS))}."
                 )
 
-            context = ExecutorContext(fhir=fhir, clinic_name=clinic_name, task_id=task_id)
+            context = ExecutorContext(
+                fhir=fhir,
+                documents=documents,
+                embedder=embedder,
+                clinic_name=clinic_name,
+                task_id=task_id,
+            )
 
             result = run_agent(
                 provider=provider,
@@ -178,6 +200,8 @@ def run_task(
             sink.close()
         if owned_fhir:
             fhir.close()
+        if owned_documents:
+            documents.close()
 
 
 def _route(

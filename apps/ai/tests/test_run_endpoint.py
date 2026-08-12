@@ -194,16 +194,16 @@ class TestRunEndpoint:
     def test_health_advertises_which_agents_are_deployed(self) -> None:
         body = TestClient(app).get("/health").json()
 
-        assert body["agents"] == ["followup", "scheduling"]
+        assert body["agents"] == ["docqa", "followup", "scheduling"]
 
     def test_health_advertises_the_lanes_the_router_knows(self) -> None:
-        # `docqa` is a lane the router can pick and an agent this service
-        # cannot run. Listing both makes that gap visible rather than a
-        # surprise at runtime.
+        # Both lists are reported because they can differ, and a lane with no
+        # agent behind it is a runtime surprise rather than a visible gap. They
+        # agree now that the fleet is complete; this is what says so.
         body = TestClient(app).get("/health").json()
 
         assert body["routes"] == ["docqa", "followup", "scheduling"]
-        assert set(body["routes"]) - set(body["agents"]) == {"docqa"}
+        assert set(body["routes"]) == set(body["agents"])
 
     def test_returns_the_run_result_in_camel_case(self, monkeypatch) -> None:
         def fake_run(**kwargs: object):
@@ -302,10 +302,10 @@ class TestRunEndpoint:
 
 
 def test_the_registry_holds_the_agents_this_service_can_actually_run() -> None:
-    # `docqa` is deliberately absent: it is seeded in the fleet and nameable by
-    # the router, but not built. A task routed to it escalates rather than
-    # being quietly handled by whichever agent happened to be nearest.
-    assert set(runner.AGENTS) == {"scheduling", "followup"}
+    # The full fleet from `03-FEATURES`. This is the list `/health` reports and
+    # the one a routed task is looked up in, so an agent added to the seed but
+    # not to the registry fails loudly here rather than at runtime.
+    assert set(runner.AGENTS) == {"scheduling", "followup", "docqa"}
 
 
 class TestClaimingTheTask:

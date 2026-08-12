@@ -166,13 +166,33 @@ class TestRoutingInsideARun:
         assert result.cost_usd > 0
         assert result.iterations == 0
 
-    def test_a_lane_with_no_agent_behind_it_is_refused(self) -> None:
-        # docqa is routable and unbuilt. Better a clear error than the nearest
-        # agent quietly taking the work.
+    def test_every_lane_the_router_can_pick_now_has_an_agent(self) -> None:
+        # This used to assert the opposite for `docqa`, which was routable and
+        # unbuilt. Now the router's lanes and the registry match exactly, and
+        # this is what stops them drifting apart again.
+        from app.agents.runner import AGENTS
+
+        assert set(orchestrator.ROUTES) == set(AGENTS)
+
+    def test_an_agent_this_service_does_not_deploy_is_refused(self) -> None:
+        # The mechanism still matters with nothing currently missing: a caller
+        # naming an agent that is not here gets a clear error rather than the
+        # nearest agent quietly taking the work. Named explicitly, because the
+        # router itself cannot produce an unknown lane — a word it does not
+        # recognise escalates instead.
         from app.agents.runner import UnknownAgentError
 
-        with pytest.raises(UnknownAgentError, match="docqa"):
-            self.run("docqa")
+        with pytest.raises(UnknownAgentError, match="billing"):
+            run_task(
+                task_id="t-1",
+                task_input="refund my last visit",
+                agent_kind="billing",
+                provider=RecordedProvider(responses=[]),
+                sink=FakeSink(),
+                fhir=object(),
+                priced_on=PRICED_ON,
+                redact=False,
+            )
 
     def test_naming_an_agent_skips_the_router_entirely(self) -> None:
         sink = FakeSink()
