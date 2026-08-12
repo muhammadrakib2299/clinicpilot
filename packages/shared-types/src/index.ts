@@ -42,12 +42,25 @@ export type AgentKind = z.infer<typeof AgentKind>;
  * produced in Python and stored by TypeScript, and the two ends have to agree
  * before Postgres gets a chance to complain. The gateway checks incoming
  * vectors against it so a mismatch is a 400 naming both lengths, rather than a
- * raw `expected 384 dimensions, not 1024` from the driver.
+ * raw `expected 1024 dimensions, not 384` from the driver.
  *
- * Changing it means a migration and a full re-ingest — existing vectors are
- * not convertible. See the `document_chunks` schema comment.
+ * **1024 was measured, not chosen.** This started at 384 because that is a
+ * familiar sentence-transformer width — which was the wrong way to think about
+ * it. With feature hashing the dimension is not a property of a model, it is a
+ * collision budget, and 384 buckets was too few: a retrieval eval over the
+ * seeded corpus put a chaperones passage above the cancellation policy for
+ * "how do I cancel my appointment", purely because one query term collided with
+ * one term in a short passage. Top-1 accuracy went from 16/18 to 18/18 at 768,
+ * and 1024 is the next power of two, leaving headroom as a corpus grows.
+ *
+ * It is also the width of the obvious real embedding model to swap in, which
+ * makes that swap a re-ingest rather than a migration.
+ *
+ * Changing it means a migration and a full re-ingest — existing vectors are not
+ * convertible to a different width. See the `document_chunks` schema comment,
+ * and `0007_embedding_dimensions.sql`, which is that prediction coming true.
  */
-export const EMBEDDING_DIMENSIONS = 384;
+export const EMBEDDING_DIMENSIONS = 1024;
 
 export const PlanCode = z.enum(["free", "pro", "clinic", "enterprise"]);
 export type PlanCode = z.infer<typeof PlanCode>;

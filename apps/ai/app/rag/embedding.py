@@ -46,7 +46,13 @@ from typing import Protocol
 #: structural ties a Python constant to a TypeScript one, so the gateway
 #: validates the length it receives and rejects a mismatch by name — a wrong
 #: number fails at the boundary rather than as a driver error at INSERT.
-EMBEDDING_DIMENSIONS = 384
+#:
+#: Here the number means something specific: **it is a collision budget**, not a
+#: model's output width. Every distinct term and bigram in the corpus is hashed
+#: into one of these buckets, so too few buckets means unrelated text scoring
+#: as similar. 384 measurably did: see the note in shared-types, and
+#: `tests/test_ingest.py`, which is the eval that caught it.
+EMBEDDING_DIMENSIONS = 1024
 
 Vector = list[float]
 
