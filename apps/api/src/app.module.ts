@@ -7,6 +7,7 @@ import { AuthModule } from "./auth/auth.module";
 import { RequestContextMiddleware } from "./common/request-context";
 import { DbModule } from "./db/db.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { EscalationsModule } from "./escalations/escalations.module";
 import { FhirModule } from "./fhir/fhir.module";
 import { HealthController } from "./health/health.controller";
 import { MessagesModule } from "./messages/messages.module";
@@ -34,6 +35,7 @@ import { TasksModule } from "./tasks/tasks.module";
     AuthModule,
     QueueModule,
     RealtimeModule,
+    EscalationsModule,
     TasksModule,
     AgentsModule,
     OverviewModule,

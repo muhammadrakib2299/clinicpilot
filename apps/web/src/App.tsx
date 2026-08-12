@@ -8,8 +8,11 @@ import { AuditPage } from "@/pages/AuditPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotBuiltPage } from "@/pages/NotBuiltPage";
+import { QueuePage } from "@/pages/QueuePage";
 import { TasksPage } from "@/pages/TasksPage";
+import { countEscalations } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { useApi } from "@/lib/useApi";
 
 /** Screens the sidebar advertises but that this phase does not implement. */
 const PLACEHOLDERS = [
@@ -61,13 +64,18 @@ function Shell() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
+  // The badge is loaded here rather than in the Sidebar so acting on the queue
+  // can refresh it — a count that stays at 4 after you clear it is worse than
+  // no count at all.
+  const { data: queued, reload: reloadQueue } = useApi(countEscalations, []);
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-text">
-      <Sidebar />
+      <Sidebar openEscalations={queued?.open ?? 0} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           theme={theme}
@@ -77,6 +85,17 @@ function Shell() {
           <Routes>
             <Route path="/" element={<DashboardPage onOpenTask={setOpenTaskId} />} />
             <Route path="/tasks" element={<TasksPage onOpenTask={setOpenTaskId} />} />
+            <Route
+              path="/queue"
+              element={
+                <QueuePage
+                  onOpenTask={(taskId) => {
+                    setOpenTaskId(taskId);
+                    reloadQueue();
+                  }}
+                />
+              }
+            />
             <Route path="/audit" element={<AuditPage />} />
             {PLACEHOLDERS.map((page) => (
               <Route

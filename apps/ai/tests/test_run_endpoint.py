@@ -32,6 +32,7 @@ class FakeSink:
         self.steps: list[TraceStep] = []
         self.status: str | None = None
         self.outcome: str | None = None
+        self.reason: str | None = None
         self.running = False
         self.closed = False
 
@@ -41,9 +42,10 @@ class FakeSink:
     def mark_running(self) -> None:
         self.running = True
 
-    def complete(self, status: str, outcome: str | None) -> None:
+    def complete(self, status: str, outcome: str | None, reason: str | None = None) -> None:
         self.status = status
         self.outcome = outcome
+        self.reason = reason
 
     def close(self) -> None:
         self.closed = True

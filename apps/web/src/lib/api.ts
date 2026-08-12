@@ -1,5 +1,7 @@
 import type {
   AuditQueryInput,
+  EscalationStatus,
+  EscalationSummary,
   SessionUser,
   UserRole,
 } from "@clinicpilot/shared-types";
@@ -156,7 +158,7 @@ export async function downloadAuditCsv(filters: AuditQueryInput = {}): Promise<v
   URL.revokeObjectURL(url);
 }
 
-export type { SessionUser, UserRole };
+export type { EscalationStatus, EscalationSummary, SessionUser, UserRole };
 
 export async function createTask(input: string, agentKind: AgentKind = "scheduling") {
   return json<Task>(
@@ -222,6 +224,33 @@ export interface ActivityItem {
 
 export async function listAgents() {
   return json<AgentSummary[]>(await request("/api/agents"));
+}
+
+// ── The human queue ─────────────────────────────────────────────────────────
+
+export async function listEscalations(status?: EscalationStatus) {
+  const query = status ? `?status=${status}` : "";
+  return json<EscalationSummary[]>(await request(`/api/escalations${query}`));
+}
+
+export async function countEscalations() {
+  return json<{ open: number; acknowledged: number }>(await request("/api/escalations/count"));
+}
+
+export async function acknowledgeEscalation(id: string) {
+  return json<EscalationSummary>(
+    await request(`/api/escalations/${id}/acknowledge`, { method: "POST" }),
+  );
+}
+
+export async function resolveEscalation(id: string, resolution: string) {
+  return json<EscalationSummary>(
+    await request(`/api/escalations/${id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resolution }),
+    }),
+  );
 }
 
 export async function getOverview() {

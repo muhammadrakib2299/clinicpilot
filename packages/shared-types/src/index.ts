@@ -196,12 +196,84 @@ export const AppendTraceInput = z.object({
 });
 export type AppendTraceInput = z.infer<typeof AppendTraceInput>;
 
+/**
+ * Why an agent handed a task to a human.
+ *
+ * `unspecified` is what makes the escalation row mandatory rather than
+ * conditional. The gateway queues one whenever a task completes as
+ * `escalated`; a caller that does not say why still gets queued, because a
+ * missing reason must never become a missing queue entry.
+ */
+export const EscalationReason = z.enum([
+  "router",
+  "max_iterations",
+  "answer_check",
+  "unspecified",
+]);
+export type EscalationReason = z.infer<typeof EscalationReason>;
+
 /** Terminal state reported when an agent run finishes. */
 export const CompleteTaskInput = z.object({
   status: z.enum(["resolved", "escalated", "failed"]),
   outcome: z.string().max(4000).nullish(),
+  /**
+   * Only meaningful alongside `status: "escalated"`, and optional even then.
+   * The AI service knows which of its three escalation paths fired; the
+   * gateway does not, and should not have to infer it from the outcome text.
+   */
+  escalationReason: EscalationReason.optional(),
 });
 export type CompleteTaskInput = z.infer<typeof CompleteTaskInput>;
+
+// ── The human queue ─────────────────────────────────────────────────────────
+
+export const EscalationStatus = z.enum(["open", "acknowledged", "resolved"]);
+export type EscalationStatus = z.infer<typeof EscalationStatus>;
+
+/** Query for `GET /api/escalations`. */
+export const EscalationQuery = z.object({
+  /** Omitted means every status — the queue defaults to what is outstanding. */
+  status: EscalationStatus.optional(),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+});
+export type EscalationQuery = z.infer<typeof EscalationQuery>;
+export type EscalationQueryInput = z.input<typeof EscalationQuery>;
+
+/**
+ * Body of `POST /api/escalations/:id/resolve`.
+ *
+ * The note is required, and that is the whole point of the endpoint. An
+ * escalation closed with no record of what was done leaves the queue tidy and
+ * the question — "what happened to this patient's message?" — unanswerable,
+ * which is the one thing a queue exists to prevent.
+ */
+export const ResolveEscalationInput = z.object({
+  resolution: z
+    .string()
+    .trim()
+    .min(1, "say what was done — an escalation closed with no note answers nothing later")
+    .max(2000),
+});
+export type ResolveEscalationInput = z.infer<typeof ResolveEscalationInput>;
+
+/** One row of the queue, with enough of its task to triage without opening it. */
+export interface EscalationSummary {
+  id: string;
+  taskId: string;
+  reason: EscalationReason;
+  summary: string;
+  status: EscalationStatus;
+  /** The patient's original message. */
+  taskInput: string;
+  taskChannel: string;
+  agentName: string | null;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolution: string | null;
+  createdAt: string;
+}
 
 // ── Internal FHIR API (ADR-008) ─────────────────────────────────────────────
 //

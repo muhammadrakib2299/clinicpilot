@@ -60,6 +60,11 @@ class AgentRun:
     iterations: int
     usage: TokenUsage
     cost_usd: float
+    #: Which escalation path fired, for the human queue to label the row.
+    #: `None` on any outcome that is not an escalation — and permitted to be
+    #: `None` on one that is, because the queue entry is written on the status
+    #: alone. A missing label must never become a missing entry.
+    escalation_reason: str | None = None
 
 
 def run_agent(
@@ -155,6 +160,7 @@ def run_agent(
                     iterations=iteration,
                     usage=totals.usage,
                     cost_usd=totals.cost_usd,
+                    escalation_reason="answer_check",
                 )
 
             # Handed back rather than aborted — the same recovery path a failing
@@ -263,6 +269,7 @@ def run_agent(
         iterations=max_iterations,
         usage=totals.usage,
         cost_usd=totals.cost_usd,
+        escalation_reason="max_iterations",
     )
 
 

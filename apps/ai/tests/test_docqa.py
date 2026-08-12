@@ -257,15 +257,17 @@ class FakeSink:
         self.steps: list[TraceStep] = []
         self.status: str | None = None
         self.outcome: str | None = None
+        self.reason: str | None = None
 
     def __call__(self, step: TraceStep) -> None:
         self.steps.append(step)
 
     def mark_running(self) -> None: ...
 
-    def complete(self, status: str, outcome: str | None) -> None:
+    def complete(self, status: str, outcome: str | None, reason: str | None = None) -> None:
         self.status = status
         self.outcome = outcome
+        self.reason = reason
 
     def close(self) -> None: ...
 
@@ -400,6 +402,11 @@ class TestTheAnswerCheckInsideARun:
         assert sink.status == "escalated"
         assert sink.steps[-1].kind == "escalation"
         assert sink.steps[-1].content == {"reason": "answer_check", "attempts": 2}
+        # And the gateway is told which path fired, so the human queue can
+        # label the row as "could not produce a verifiable answer" rather than
+        # as a generic escalation.
+        assert sink.reason == "answer_check"
+        assert result.escalation_reason == "answer_check"
 
     def test_a_clean_answer_is_never_delayed_by_the_check(self) -> None:
         _, sink = self.run(

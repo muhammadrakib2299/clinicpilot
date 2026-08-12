@@ -6,6 +6,7 @@ import {
   Database,
   Inbox,
   LayoutDashboard,
+  LifeBuoy,
   ScrollText,
   Settings,
   Workflow,
@@ -33,6 +34,7 @@ const NAV: Array<{
   { icon: LayoutDashboard, label: "Dashboard", to: "/" },
   { icon: Bot, label: "Agents", to: "/agents" },
   { icon: Inbox, label: "Tasks", to: "/tasks" },
+  { icon: LifeBuoy, label: "Human queue", to: "/queue" },
   { icon: Workflow, label: "Workflows", to: "/workflows" },
   { icon: Database, label: "FHIR Explorer", to: "/fhir" },
   { icon: BarChart3, label: "Analytics", to: "/analytics" },
@@ -49,7 +51,7 @@ const INITIALS = (name: string) =>
     .map((part) => part[0]!.toUpperCase())
     .join("");
 
-export function Sidebar({ openTaskCount }: { openTaskCount?: number }) {
+export function Sidebar({ openEscalations }: { openEscalations?: number }) {
   const { user, can } = useAuth();
   const visible = NAV.filter((item) => !item.minRole || can(item.minRole));
   return (
@@ -78,9 +80,12 @@ export function Sidebar({ openTaskCount }: { openTaskCount?: number }) {
           >
             <item.icon className="size-4 shrink-0" strokeWidth={2} />
             <span className="flex-1 text-left">{item.label}</span>
-            {item.label === "Tasks" && openTaskCount ? (
-              <span className="rounded-full border border-border bg-surface-1 px-1.5 text-xs tabular-nums text-muted">
-                {openTaskCount}
+            {/* The one number in the nav, because it is the one that means
+                somebody has to do something. It is styled as a warning rather
+                than as a neutral count for the same reason. */}
+            {item.to === "/queue" && openEscalations ? (
+              <span className="rounded-full border border-warning/40 bg-surface-1 px-1.5 text-xs font-medium tabular-nums text-warning">
+                {openEscalations}
               </span>
             ) : null}
           </NavLink>

@@ -11,6 +11,7 @@ import { currentTenantId } from "../common/tenant";
 import { DbService } from "../db/db.service";
 import type { Db } from "../db/client";
 import { agents, llmUsage, tasks, traces } from "../db/schema";
+import { EscalationsService } from "../escalations/escalations.service";
 import { TaskQueueService } from "../queue/task-queue.service";
 import { RealtimeService } from "../realtime/realtime.service";
 
@@ -37,6 +38,7 @@ export class TasksService {
     private readonly realtime: RealtimeService,
     private readonly queue: TaskQueueService,
     private readonly audit: AuditService,
+    private readonly escalations: EscalationsService,
   ) {}
 
   async create(input: CreateTaskInput) {
@@ -180,6 +182,19 @@ export class TasksService {
     return updated;
   }
 
+  /**
+   * Record how a run ended — and queue a human when it ended in their lap.
+   *
+   * The escalation row is written here, in the same transaction, rather than by
+   * the AI service in a second call. Escalation happens from three places
+   * already (the router refusing to route, the loop failing to converge, an
+   * answer that could not be verified) and will happen from more; a caller that
+   * has to remember a second request is a caller that will eventually forget
+   * one, and the symptom would be a patient's message nobody is told about.
+   *
+   * So the reason is optional and the row is not. A caller that says nothing
+   * still queues, as `unspecified`.
+   */
   async complete(tenantId: string, id: string, input: CompleteTaskInput) {
     const updated = await this.dbService.withTenant(tenantId, async (tx) => {
       await this.loadOne(tx, tenantId, id);
@@ -193,6 +208,15 @@ export class TasksService {
         })
         .where(eq(tasks.id, id))
         .returning();
+
+      if (input.status === "escalated") {
+        await this.escalations.queue(tx, {
+          tenantId,
+          taskId: id,
+          reason: input.escalationReason,
+          summary: input.outcome ?? null,
+        });
+      }
 
       return row!;
     });

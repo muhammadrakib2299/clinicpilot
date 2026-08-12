@@ -111,11 +111,32 @@ const OVERVIEW_RESPONSE = {
   activity: [],
 };
 
+function escalation(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "99999999-8888-4777-8666-555555555555",
+    taskId: TASK.id,
+    reason: "router",
+    summary: "No agent matched; handing to a human.",
+    status: "open",
+    taskInput: "I have had chest pain since this morning.",
+    taskChannel: "web",
+    agentName: "Scheduling Agent",
+    acknowledgedBy: null,
+    acknowledgedAt: null,
+    resolvedBy: null,
+    resolvedAt: null,
+    resolution: null,
+    createdAt: "2026-08-12T09:00:00.000Z",
+    ...overrides,
+  };
+}
+
 /** Every endpoint the signed-in dashboard hits on mount. */
 const BASE_HANDLERS = {
   "/api/auth/me": SESSION,
   "/api/overview": OVERVIEW_RESPONSE,
   "/api/agents": AGENTS_RESPONSE,
+  "/api/escalations/count": { open: 0, acknowledged: 0 },
 };
 
 /** Renders and waits out the "verifying your stored token" gate. */
@@ -407,5 +428,168 @@ describe("trace drawer", () => {
     fireEvent.click(screen.getByLabelText("Close trace"));
 
     expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+  });
+});
+
+describe("the human queue", () => {
+  /** Signs in, then navigates to the queue via the nav link. */
+  async function openQueue(handlers: Record<string, unknown>) {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, ...handlers }));
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /human queue/i }));
+  }
+
+  it("shows the outstanding count in the nav", async () => {
+    // The one number in the sidebar, because it is the one that means somebody
+    // has to do something.
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ ...BASE_HANDLERS, "/api/escalations/count": { open: 3, acknowledged: 1 } }),
+    );
+    await renderSignedIn();
+
+    const link = screen.getByRole("link", { name: /human queue/i });
+    await waitFor(() => expect(link).toHaveTextContent("3"));
+  });
+
+  it("shows no badge when the queue is empty", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
+    await renderSignedIn();
+
+    expect(screen.getByRole("link", { name: /human queue/i })).toHaveTextContent(/^Human queue$/);
+  });
+
+  it("lists what escalated, and translates the reason into a sentence", async () => {
+    // The stored value is an enum for querying. A person needs to be told that
+    // "router" means the orchestrator would not send this to any agent.
+    await openQueue({ "/api/escalations": [escalation()] });
+
+    await waitFor(() =>
+      expect(screen.getByText("I have had chest pain since this morning.")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Not routable")).toBeInTheDocument();
+    expect(screen.getByText(/would not send this to any agent/i)).toBeInTheDocument();
+  });
+
+  it("names every escalation reason it can be sent", async () => {
+    await openQueue({
+      "/api/escalations": [
+        escalation({ id: "e1", reason: "max_iterations" }),
+        escalation({ id: "e2", reason: "answer_check" }),
+        escalation({ id: "e3", reason: "unspecified" }),
+      ],
+    });
+
+    await waitFor(() => expect(screen.getByText("Did not converge")).toBeInTheDocument());
+    expect(screen.getByText("Unverifiable answer")).toBeInTheDocument();
+    // Not a bug: the queue entry is written on the task's status alone, so a
+    // run that did not categorise itself still reaches a human.
+    expect(screen.getByText("Escalated")).toBeInTheDocument();
+  });
+
+  it("offers a coordinator the actions as well as the trace", async () => {
+    await openQueue({ "/api/escalations": [escalation()] });
+
+    await waitFor(() => expect(screen.getByText("I'll take it")).toBeInTheDocument());
+    expect(screen.getByText("Resolve")).toBeInTheDocument();
+    expect(screen.getByText("View trace")).toBeInTheDocument();
+  });
+
+  it("lets a viewer see the backlog without being able to act on it", async () => {
+    // Hiding the queue from the people standing at the desk is the wrong
+    // default; the buttons are what a viewer does not get.
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({
+        ...BASE_HANDLERS,
+        "/api/auth/me": { ...SESSION, role: "viewer", memberships: [SESSION.memberships[0]] },
+        "/api/escalations": [escalation()],
+      }),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("Priya Nair")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("link", { name: /human queue/i }));
+
+    await waitFor(() => expect(screen.getByText("View trace")).toBeInTheDocument());
+    expect(screen.queryByText("I'll take it")).not.toBeInTheDocument();
+    expect(screen.queryByText("Resolve")).not.toBeInTheDocument();
+  });
+
+  it("will not close an escalation without a note", async () => {
+    // The server refuses it too. An escalation closed with no record leaves
+    // the queue tidy and "what happened to this message" unanswerable.
+    await openQueue({ "/api/escalations": [escalation()] });
+
+    await waitFor(() => expect(screen.getByText("Resolve")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Resolve"));
+
+    expect(screen.getByText("Close it")).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText(/what did you do/i), {
+      target: { value: "Called the patient." },
+    });
+    expect(screen.getByText("Close it")).toBeEnabled();
+  });
+
+  it("posts the note when closing one", async () => {
+    const fetchMock = mockFetch({
+      ...BASE_HANDLERS,
+      "/api/escalations": [escalation()],
+      "/api/escalations/99999999-8888-4777-8666-555555555555/resolve": escalation({
+        status: "resolved",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /human queue/i }));
+
+    await waitFor(() => expect(screen.getByText("Resolve")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Resolve"));
+    fireEvent.change(screen.getByPlaceholderText(/what did you do/i), {
+      target: { value: "Rebooked by phone." },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Close it"));
+    });
+
+    const posted = (fetchMock.mock.calls as unknown as [string, RequestInit?][]).find(([url]) =>
+      url.includes("/resolve"),
+    );
+    expect(posted?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(posted?.[1]?.body))).toEqual({ resolution: "Rebooked by phone." });
+  });
+
+  it("shows who is already working one rather than offering it again", async () => {
+    await openQueue({
+      "/api/escalations": [
+        escalation({ status: "acknowledged", acknowledgedBy: "sam@demo.clinicpilot.io" }),
+      ],
+    });
+
+    await waitFor(() => expect(screen.getByText(/being worked by sam@demo/i)).toBeInTheDocument());
+    expect(screen.queryByText("I'll take it")).not.toBeInTheDocument();
+  });
+
+  it("shows the resolution on a closed one", async () => {
+    await openQueue({
+      "/api/escalations": [
+        escalation({
+          status: "resolved",
+          resolvedBy: "sam@demo.clinicpilot.io",
+          resolution: "Called the patient and booked them in.",
+        }),
+      ],
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText(/called the patient and booked them in/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("says so plainly when nothing is waiting", async () => {
+    await openQueue({ "/api/escalations": [] });
+
+    await waitFor(() =>
+      expect(screen.getByText(/every escalation has been picked up/i)).toBeInTheDocument(),
+    );
   });
 });

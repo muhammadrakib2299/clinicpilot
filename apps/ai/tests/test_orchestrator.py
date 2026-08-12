@@ -16,7 +16,7 @@ from app.agents import orchestrator
 from app.agents.runner import run_task
 from app.agents.trace import TraceStep
 from app.llm.pricing import TokenUsage
-from app.llm.provider import LlmResponse, RecordedProvider
+from app.llm.provider import LlmResponse, RecordedProvider, ToolCall
 
 PRICED_ON = date(2026, 8, 11)
 
@@ -37,15 +37,17 @@ class FakeSink:
         self.steps: list[TraceStep] = []
         self.status: str | None = None
         self.outcome: str | None = None
+        self.reason: str | None = None
 
     def __call__(self, step: TraceStep) -> None:
         self.steps.append(step)
 
     def mark_running(self) -> None: ...
 
-    def complete(self, status: str, outcome: str | None) -> None:
+    def complete(self, status: str, outcome: str | None, reason: str | None = None) -> None:
         self.status = status
         self.outcome = outcome
+        self.reason = reason
 
     def close(self) -> None: ...
 
@@ -209,3 +211,59 @@ class TestRoutingInsideARun:
         )
 
         assert not any(s.label.startswith("Routing") for s in sink.steps)
+
+
+class TestTheEscalationReason:
+    """Which of the three escalation paths fired, for the human queue to label.
+
+    Optional at every layer on purpose: the gateway queues a human on the
+    *status*, and the reason only labels the row. Making it required would turn
+    "we did not categorise this" into "we did not tell anyone".
+    """
+
+    def sink_after(self, responses: list[LlmResponse], fhir_override: object = None) -> FakeSink:
+        sink = FakeSink()
+        run_task(
+            task_id="t-1",
+            task_input="I have had chest pain since this morning",
+            provider=RecordedProvider(responses=responses),
+            sink=sink,
+            fhir=fhir_override or object(),
+            priced_on=PRICED_ON,
+            redact=False,
+        )
+        return sink
+
+    def test_a_router_refusal_is_reported_as_router(self) -> None:
+        assert self.sink_after([reply("ESCALATE")]).reason == "router"
+
+    def test_a_resolved_run_reports_no_reason(self) -> None:
+        sink = self.sink_after([reply("scheduling"), reply("Booked for Tuesday.")])
+
+        assert sink.status == "resolved"
+        assert sink.reason is None
+
+    def test_running_out_of_iterations_is_reported_as_max_iterations(self) -> None:
+        from app.agents.loop import DEFAULT_MAX_ITERATIONS
+
+        wants_tool = LlmResponse(
+            text="",
+            tool_calls=(ToolCall("t1", "find_appointments", {"patient_id": "1"}),),
+            stop_reason="tool_use",
+            usage=TokenUsage(input_tokens=100, output_tokens=10),
+            model="claude-sonnet-5",
+        )
+
+        class Stalled:
+            """A gateway that answers, so the loop keeps going and never converges."""
+
+            def find_appointments(self, **_kwargs: object) -> list:
+                return []
+
+        sink = self.sink_after(
+            [reply("scheduling"), *([wants_tool] * DEFAULT_MAX_ITERATIONS)],
+            fhir_override=Stalled(),
+        )
+
+        assert sink.status == "escalated"
+        assert sink.reason == "max_iterations"

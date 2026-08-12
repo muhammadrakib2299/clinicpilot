@@ -153,7 +153,7 @@ def run_task(
                 routing = _route(provider, task_input, sink, priced_on)
 
                 if routing.escalated:
-                    sink.complete("escalated", routing.reason)
+                    sink.complete("escalated", routing.reason, reason="router")
                     return AgentRun(
                         outcome="escalated",
                         summary=routing.reason,
@@ -163,6 +163,7 @@ def run_task(
                         cost_usd=cost_usd(
                             routing.response.model, routing.response.usage, on=priced_on
                         ),
+                        escalation_reason="router",
                     )
 
                 agent_kind = routing.agent_kind
@@ -205,7 +206,7 @@ def run_task(
             sink.complete("failed", f"{type(exc).__name__}: {exc}")
             raise
 
-        sink.complete(result.outcome, result.summary)
+        sink.complete(result.outcome, result.summary, reason=result.escalation_reason)
         return result
     finally:
         if owned_sink:

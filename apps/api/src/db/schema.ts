@@ -62,6 +62,35 @@ export const taskStatus = pgEnum("task_status", [
  */
 export const messageStatus = pgEnum("message_status", ["drafted", "sent", "failed"]);
 
+/**
+ * Why an agent handed a task to a human.
+ *
+ * One value per place the system actually escalates from, plus `unspecified`
+ * for a caller that did not say. That last one is not laziness — it is what
+ * keeps the escalation row mandatory: the gateway writes one whenever a task
+ * completes as `escalated`, and a missing reason must not be a missing queue
+ * entry. Add a value when a new escalation path exists, not in anticipation.
+ */
+export const escalationReason = pgEnum("escalation_reason", [
+  "router",
+  "max_iterations",
+  "answer_check",
+  "unspecified",
+]);
+
+/**
+ * Where a queued escalation has got to.
+ *
+ * `acknowledged` exists so two people do not work the same one. It is a claim,
+ * not an assignment — nothing routes escalations to individuals, and inventing
+ * that before anyone has asked for it would be a workflow nobody wanted.
+ */
+export const escalationStatus = pgEnum("escalation_status", [
+  "open",
+  "acknowledged",
+  "resolved",
+]);
+
 export const traceKind = pgEnum("trace_kind", [
   "reason",
   "reflection",
@@ -207,6 +236,58 @@ export const messages = pgTable(
   (table) => [
     index("messages_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
     index("messages_patient_idx").on(table.tenantId, table.patientRef),
+  ],
+);
+
+/**
+ * Work an agent handed back to a person.
+ *
+ * A separate table rather than a status on `tasks`, because they answer
+ * different questions. `tasks.status = 'escalated'` says how a run ended; this
+ * says whether a human has dealt with it, who, and what they did — and a task
+ * row has no room for that without becoming two records in one.
+ *
+ * **Written by the gateway, not by the agent.** `TasksService.complete()`
+ * inserts one in the same transaction that marks a task escalated, so no code
+ * path can escalate without queueing. The AI service supplies the reason when
+ * it knows one; it cannot supply the row's existence.
+ *
+ * No unique constraint on `taskId`, deliberately: an escalation is an *event*,
+ * not a property of a task. A task cannot normally escalate twice — `isRunnable`
+ * refuses to re-run one that already has — so a second row means it genuinely
+ * happened twice, after a failure and a retry, and a human should see both.
+ */
+export const escalations = pgTable(
+  "escalations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    reason: escalationReason("reason").notNull().default("unspecified"),
+    /** What the agent said as it gave up — the first thing a human reads. */
+    summary: text("summary").notNull(),
+    status: escalationStatus("status").notNull().default("open"),
+    /** Who is working it. */
+    acknowledgedBy: uuid("acknowledged_by").references(() => users.id, { onDelete: "set null" }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    resolvedBy: uuid("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    /** What the person actually did. The point of the queue, six months later. */
+    resolution: text("resolution"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The queue query: filtered by status, newest first, within a tenant.
+    index("escalations_tenant_status_idx").on(
+      table.tenantId,
+      table.status,
+      table.createdAt.desc(),
+    ),
+    index("escalations_task_idx").on(table.taskId),
   ],
 );
 
@@ -438,6 +519,11 @@ export const llmUsageRelations = relations(llmUsage, ({ one }) => ({
   task: one(tasks, { fields: [llmUsage.taskId], references: [tasks.id] }),
 }));
 
+export const escalationsRelations = relations(escalations, ({ one }) => ({
+  tenant: one(tenants, { fields: [escalations.tenantId], references: [tenants.id] }),
+  task: one(tasks, { fields: [escalations.taskId], references: [tasks.id] }),
+}));
+
 export const documentsRelations = relations(documents, ({ one, many }) => ({
   tenant: one(tenants, { fields: [documents.tenantId], references: [tenants.id] }),
   chunks: many(documentChunks),
@@ -450,6 +536,9 @@ export const documentChunksRelations = relations(documentChunks, ({ one }) => ({
 
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+
+export type Escalation = typeof escalations.$inferSelect;
+export type NewEscalation = typeof escalations.$inferInsert;
 
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
@@ -489,4 +578,5 @@ export const TENANT_SCOPED_TABLES = [
   "messages",
   "documents",
   "document_chunks",
+  "escalations",
 ] as const;

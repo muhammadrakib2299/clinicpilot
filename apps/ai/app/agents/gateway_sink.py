@@ -100,11 +100,19 @@ class GatewayTraceSink:
                 f"gateway refused the claim: {response.status_code} {_message(response)}"
             )
 
-    def complete(self, status: str, outcome: str | None) -> None:
-        self._post(
-            f"/api/internal/tasks/{self.task_id}/complete",
-            {"status": status, "outcome": outcome},
-        )
+    def complete(self, status: str, outcome: str | None, reason: str | None = None) -> None:
+        """Report the terminal state, and why if it was an escalation.
+
+        `reason` is optional at every layer on purpose. The gateway queues a
+        human whenever the status is `escalated` — the reason only labels the
+        row. Making it required would turn "we did not categorise this" into "we
+        did not tell anyone", which is the failure the queue exists to prevent.
+        """
+        payload: dict[str, object] = {"status": status, "outcome": outcome}
+        if reason:
+            payload["escalationReason"] = reason
+
+        self._post(f"/api/internal/tasks/{self.task_id}/complete", payload)
 
     def _post(self, path: str, payload: dict[str, object]) -> None:
         try:
