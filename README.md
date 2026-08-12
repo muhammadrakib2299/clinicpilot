@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_3_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-611_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-628_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -113,6 +113,13 @@ pnpm db:seed        # two demo clinics, their agent fleets, and four users
 pnpm fhir:seed      # synthetic scheduling scenario on the HAPI sandbox
 ```
 
+```bash
+pnpm n8n:import     # load workflows/*.json into n8n, activate, restart it
+```
+
+`n8n:import` is what makes the Follow-up Agent's messages go anywhere: without
+it they are composed, recorded, and left at `drafted`.
+
 `db:rls` is not optional. **Postgres superusers bypass row-level security
 silently** — the policies stay in place and every one is skipped — and the
 compose default user is a superuser. Without this step tenant isolation is not
@@ -212,8 +219,8 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 226 tests, 5 workspaces
-pnpm test:integration                                    # 62, needs a live database
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 231 tests, 5 workspaces
+pnpm test:integration                                    # 74, needs a live database
 cd apps/ai && pytest && ruff check .                     # 299 tests
 ```
 
@@ -302,6 +309,7 @@ real pgvector database, and the model call was not.
 | **Verified citations** | The loop refuses an answer citing a passage that run never retrieved, and hands the objection back for one correction before escalating. Mechanical — a subset test, no model call, no tokens |
 | **Retrieval that can say no** | Nearest-neighbour search always returns neighbours, so a score floor drops passages sharing no vocabulary with the question. "The documents do not cover this" is a first-class answer rather than a failure |
 | **A human queue** | Every escalation lands in a queue somebody works — claim it, close it with a note. The row is written by the *gateway*, in the same transaction that marks the task escalated, so no agent path can escalate without queueing |
+| **A scheduled n8n workflow** | Sweeps drafted follow-ups every five minutes and delivers them. It enumerates clinics first and makes one RLS-scoped pass each, because a cron has no session and therefore no tenant ([`workflows/`](./workflows/README.md)) |
 
 ### Honest about the embedder
 
@@ -326,9 +334,11 @@ the first version being wrong — see `10-LESSONS.md`.
 orchestrator picks an agent or a human, the agent runs, and every step of it is
 audited under a tenant Postgres enforces. What is left is breadth:
 
-n8n workflows (n8n is in the stack at :5678 but no workflow is wired to an
-agent, so a follow-up message is recorded `drafted` and nothing delivers it) ·
-analytics and evals · Stripe and quotas · deployment.
+a real delivery channel (the n8n workflow runs, but its carrier node is a
+stand-in — `messages.delivery_channel` records `simulated` so the row never
+implies a text somebody received) · an inbound n8n webhook so a clinic's own
+automations can create tasks · analytics and evals · Stripe and quotas ·
+deployment.
 
 Known sharp edges, all tracked in [`09-TODO.md`](./09-TODO.md) and
 [`SECURITY.md`](./SECURITY.md): the enqueue sits just outside the task's

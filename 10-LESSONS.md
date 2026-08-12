@@ -87,6 +87,70 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 
 ### Running log
 
+#### 2026-08-12 — Three silent failures between me and a working n8n workflow
+- Phase: 3
+- Context: The last unbuilt thing in Phase 3. n8n had been in the stack since
+  Phase 0 with nothing wired to it, and the Follow-up Agent composed approved
+  messages that sat at `drafted` forever.
+- **The design question was which workflow to build**, and the answer involved
+  not building the one the plan named. `09-TODO` has had *"n8n reschedule
+  appointment workflow"* open since Phase 1 — but ADR-008 made the gateway the
+  single owner of FHIR access precisely because a second implementation wrote a
+  malformed `Slot/Slot/…` reference onto a live appointment. Routing a
+  reschedule through n8n would add a **third** path to a FHIR write with its own
+  copy of the optimistic-concurrency rules. So I built the workflow n8n is
+  actually good at — a scheduled sweep over work the gateway already owns — and
+  wrote down why the other one should be struck rather than left open forever.
+- **Problems / what surprised me:** every one of them failed *silently*.
+  - **Git Bash rewrote the container path.** `--input=/workflows` reached n8n as
+    `C:/Program Files/Git/workflows`, and the import printed
+    "Importing 0 workflows... Successfully imported 0 workflows" and exited 0.
+    A success message for having done nothing. This repo has already been bitten
+    by the same MSYS rewrite once — there is a comment about it in
+    `jest.integration.config.cjs` — and I still lost ten minutes to it. `//workflows`
+    survives the rewrite and still resolves inside the container.
+  - **A workflow with no `id` is duplicated, not updated.** Three imports, three
+    workflows, all called "Follow-up delivery", and I spent a round executing
+    the stale one and wondering why my new node was not there. There is no
+    `delete:workflow` in the CLI, so the duplicates are still sitting in my
+    local n8n. The import script now refuses a workflow without a fixed id.
+  - **`--activeState=fromJson` is rejected outside queue mode**, and imports are
+    deactivated by default — so the workflow imported cleanly and then never
+    ran. Activation is a separate call *and* a restart, because schedule
+    triggers are registered at startup.
+  - **`$env` is blocked inside nodes by default in n8n 2.x**, which the workflow
+    reports as `access to env vars denied` only at execution time.
+- What worked: **verifying by execution rather than by import succeeding.** Every
+  one of those four would have passed a "the JSON is committed and imports
+  without error" check. What settled it was running the thing and looking at the
+  database: two clinics enumerated, three messages moved to `sent`, one of them
+  Riverside's — which is what proves the per-tenant loop rather than a lucky
+  single-tenant pass. Then I seeded one more message, left it alone, and watched
+  the schedule fire at 12:05:28 and deliver it unattended.
+- **The honesty problem, and how it was solved.** There is no Twilio account, so
+  "delivered" would have been a lie — and the `message_status` comment I wrote in
+  an earlier session had explicitly warned against "pretending `sent` when
+  nothing was". The fix was not to avoid `sent` but to record *what channel*:
+  `delivery_channel = 'simulated'` makes the row a statement about what happened
+  instead of an implication about a phone. Swapping the Set node for a real SMS
+  node changes that one value and nothing else. Same shape as ADR-003 and
+  ADR-009 — build the seam, do not fake the vendor — for the third time.
+- A scheduled job has no session and therefore no tenant, which turned out to be
+  the most interesting constraint in the workflow. Enumerating clinics through a
+  deliberately un-scoped `internal/tenants` endpoint and then making one RLS-
+  scoped pass each is the only option that neither bypasses RLS nor silently
+  stops covering a clinic somebody adds later.
+- What I'd do differently: check the container's view of an argument before
+  believing a CLI that reports success. `docker exec ... ls //workflows` would
+  have cost five seconds and saved the whole first detour.
+- Interview soundbite: *"Four separate things failed silently between committing
+  an n8n workflow and having one that runs — a shell rewriting the container
+  path so the import found nothing and still exited 0, missing ids duplicating
+  the workflow instead of updating it, activation being refused outside queue
+  mode, and env access blocked inside nodes. All four would have passed 'it
+  imports without error'. I only found them because I insisted on watching the
+  schedule fire and then checking the rows it changed."*
+
 #### 2026-08-12 — Escalation had worked for weeks and told nobody
 - Phase: 3
 - Context: Closing the last Phase 3 item — the `escalations` table and the human
@@ -791,6 +855,7 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-08-12 | Embedding vectors at 384 dimensions | **1024** | 384 was chosen because it is a familiar sentence-transformer width. With feature hashing the dimension is a collision budget, not a model property: a retrieval eval over the real corpus put a chaperones passage above the cancellation policy on one collision. Top-1 went 16/18 → 18/18 at 768; 1024 is the next power of two and the width of the model most likely to replace it |
 | 2026-08-12 | A score threshold would tell relevant results from irrelevant ones | **A noise floor only; the prompt and the citation check do the real work** | Measured: a nonsense query scored 0.18 against the test-results document while a correct match scored 0.17. Cosine similarity over sparse vectors is comparable within one search, not across queries |
 | 2026-08-12 | Escalation is done when the agent stops and sets a status | **Done when a person is told, and the queue write is not the agent's job** | Three escalation paths all ended by setting `tasks.status = 'escalated'` and nothing watched it — correct and useless. The row is now written by the gateway inside the task-completion transaction, so no agent path can escalate without queueing |
+| 2026-08-12 | n8n would own the "reschedule appointment" workflow (planned since Phase 1) | **The gateway keeps every FHIR write; n8n gets the scheduled sweep instead** | ADR-008 made the gateway the single owner of FHIR access after a second implementation wrote a malformed `Slot/Slot/…` reference onto a live appointment. A reschedule through n8n would be a third path to that write with its own copy of the concurrency rules |
 
 ---
 
@@ -798,8 +863,8 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **611 tests** (226 TypeScript unit,
-  62 TypeScript integration, 299 Python). Counted by running each suite rather
+  postgres, redis, n8n) across 5 workspaces. **628 tests** (231 TypeScript unit,
+  74 TypeScript integration, 299 Python). Counted by running each suite rather
   than by adding up remembered numbers, which is how the figure here was wrong
   twice; coverage % still not measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
@@ -811,9 +876,9 @@ Fill these in by launch — concrete numbers make the portfolio post land.
   Schedule, Slot, Appointment (read, write, and version-checked update)
 - [~] **# agents shipped** — **3 of 3 deployed** (Scheduling, Follow-up,
   Document Q&A), behind an orchestrator that routes to them or refuses and hands
-  to a human. Scheduling is the only one proven end to end against a live model;
-  0 n8n workflows so far, so a follow-up message is recorded `drafted` and
-  nothing delivers it
+  to a human. Scheduling is the only one proven end to end against a live model.
+  **1 n8n workflow**, scheduled and verified firing unattended — it delivers
+  follow-ups to a stand-in carrier, and the row records that it was a stand-in
 - [ ] Eval scores (agent correctness before/after prompt iterations)
 - [~] **Build time** — Phase 0 spanned 2026-07-03 → 2026-07-29 across 2 working
   sessions (26 elapsed days, ~1 day of actual work; the gap is the honest number

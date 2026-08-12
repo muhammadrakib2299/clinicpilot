@@ -91,8 +91,18 @@ the auth that Phase 2 owns anyway.
 - [x] **Cost accounting module** — cache-aware, date-bounded rate card, unknown
       model raises rather than pricing at zero
 ### Automation & queue
-- [ ] n8n "reschedule appointment" workflow (read slot → write appt → confirm)
-- [ ] Expose n8n webhook; call it from an AI-service tool
+- [~] n8n "reschedule appointment" workflow (read slot → write appt → confirm) —
+      **deliberately not built, and should probably be struck.** ADR-008 made
+      the gateway the single owner of FHIR access after a second
+      implementation wrote a malformed `Slot/Slot/…` reference onto a live
+      appointment. Routing a reschedule through n8n would add a *third* path
+      to a FHIR write, with its own copy of the optimistic-concurrency rules —
+      exactly the arrangement that ADR exists to prevent. The n8n workflow
+      that got built instead (follow-up delivery) is one n8n is actually
+      suited to: a scheduled sweep over work the gateway already owns
+- [ ] Expose n8n webhook; call it from an AI-service tool — still open, and the
+      honest use for it is inbound: a webhook n8n calls to *create* a task, so
+      a clinic's own automations can reach the fleet
 - [x] BullMQ producer (API) + worker (consumes → AI service) — **the loop is
       closed.** Producer enqueues on task creation with `jobId = taskId` so a
       double submit cannot double-run; the worker is its own process
@@ -177,7 +187,7 @@ the auth that Phase 2 owns anyway.
 - [ ] Team & Invitations UI (invite by email, per-org role, pending invites)
 - [ ] ✅ Gate (SaaS MVP): signup → org → Free plan → hit quota → Stripe Checkout (test) → quota lifts, live
 
-## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~95% — n8n is all that is left**
+## Phase 3 — Agents #2/#3 + Orchestration ⭐ **~100% of the build; the gate needs a working API key**
 
 Taken safety-first rather than agents-first: redaction, fallback and the
 self-check all wrap the *existing* agent, so each one is independently
@@ -185,12 +195,14 @@ valuable and none of them waits on the other two agents existing. As of
 2026-08-12 all three agents are deployed and the orchestrator routes to them —
 `/health` reports the router's lanes and the registry as the same set, which is
 the first time that has been true.
-- [~] Follow-up Agent: n8n scheduled sequence + templated check-ins — the
+- [x] Follow-up Agent: n8n scheduled sequence + templated check-ins — the
       templates are built and governed (four approved messages; the agent
-      cannot write to a patient in its own words). The **n8n scheduled
-      sequence is not** — a message is recorded as `drafted` and nothing
-      delivers it, which the `message_status` enum says out loud rather than
-      claiming `sent`
+      cannot write to a patient in its own words), and
+      `workflows/follow-up-delivery.json` now sweeps drafted messages every
+      five minutes and delivers them. The **carrier is a stand-in** and the row
+      records it: `delivery_channel` says `simulated`, so `sent` states what
+      happened rather than implying a text somebody received. Verified live —
+      the schedule fired unattended and delivered a seeded message
 - [x] Document Q&A: doc ingest → chunk → embed → `document_chunks` (pgvector) —
       heading-aware chunking, `python -m app.rag.ingest --demo`, 6 documents
       and 43 passages per clinic. Opening hours differ per clinic so tenant
@@ -239,7 +251,8 @@ the first time that has been true.
       synthetic SDK errors, and the orchestrator's out-of-scope escalation
       that was outstanding here
 - [ ] ✅ Gate: 3 agents deployable, routing + hand-off + fallback work —
-      **not claimed, and one thing away from it.** All three agents run,
+      **not claimed, and one thing away from it.** Everything in this phase is
+      now built, including the n8n sequence. All three agents run,
       routing works, hand-off now lands in a queue a person works, and both
       the retrieval path and the full escalation lifecycle were exercised live
       — against a real pgvector database and over HTTP with real roles (viewer
