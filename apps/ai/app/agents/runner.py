@@ -11,6 +11,7 @@ import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from app.agents import orchestrator
 from app.agents.docqa import DOCQA_TOOLS
@@ -20,7 +21,7 @@ from app.agents.followup import FOLLOWUP_TOOLS
 from app.agents.followup import SYSTEM_PROMPT as FOLLOWUP_PROMPT
 from app.agents.followup_executor import make_followup_executor
 from app.agents.gateway_sink import GatewayTraceSink
-from app.agents.loop import AgentRun, ToolExecutor, run_agent
+from app.agents.loop import AgentRun, AnswerCheck, ToolExecutor, run_agent
 from app.agents.scheduling import SCHEDULING_TOOLS
 from app.agents.scheduling import SYSTEM_PROMPT as SCHEDULING_PROMPT
 from app.agents.scheduling_executor import make_scheduling_executor
@@ -65,6 +66,11 @@ class AgentSpec:
     system: str
     tools: Sequence[ToolDefinition]
     build_executor: Callable[[ExecutorContext], ToolExecutor]
+    #: Optional. Given the executor this run is using, returns the check to run
+    #: on the final answer — the executor is the argument because the check is
+    #: usually about what that executor served. Absent for agents whose risk is
+    #: in a tool call rather than in what they say.
+    answer_check: Callable[[Any], AnswerCheck] | None = None
 
 
 AGENTS: dict[str, AgentSpec] = {
@@ -87,6 +93,9 @@ AGENTS: dict[str, AgentSpec] = {
         system=DOCQA_PROMPT,
         tools=DOCQA_TOOLS,
         build_executor=lambda ctx: make_docqa_executor(ctx.documents, ctx.embedder),
+        # The only agent with one, because it is the only one whose risk is
+        # what it says rather than what it does.
+        answer_check=lambda executor: executor.check_answer,
     ),
 }
 
@@ -173,12 +182,15 @@ def run_task(
                 task_id=task_id,
             )
 
+            executor = spec.build_executor(context)
+
             result = run_agent(
                 provider=provider,
                 system=spec.system,
                 task=task_input,
                 tools=list(spec.tools),
-                execute=spec.build_executor(context),
+                execute=executor,
+                check_answer=spec.answer_check(executor) if spec.answer_check else None,
                 on_step=sink,
                 priced_on=priced_on,
             )

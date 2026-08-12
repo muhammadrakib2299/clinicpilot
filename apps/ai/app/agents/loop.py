@@ -33,7 +33,23 @@ Outcome = Literal["resolved", "escalated", "failed"]
 #: Executes one tool call and returns what the model should observe.
 ToolExecutor = Callable[[ToolCall], str]
 
+#: Inspects the model's final answer before it is accepted. Returns `None` if
+#: the answer may be delivered, or a complaint the model can act on.
+#:
+#: This exists because not every agent's risk is in a tool call. Scheduling and
+#: Follow-up both do their damage through a `mutates` tool, which the pre-write
+#: self-check stands in front of. Document Q&A writes nothing — its whole risk
+#: is the sentence it produces, and there is no tool call to intercept.
+AnswerCheck = Callable[[str], str | None]
+
 DEFAULT_MAX_ITERATIONS = 8
+
+#: How many times a rejected answer is handed back for correction before the
+#: run escalates. One is enough for a model that mis-copied a handle; a model
+#: that cannot produce a verifiable answer will not manage it on the third try
+#: either, and spending the whole iteration budget to find that out delays the
+#: human who has to deal with it.
+DEFAULT_MAX_ANSWER_RETRIES = 1
 
 
 @dataclass(frozen=True)
@@ -57,12 +73,15 @@ def run_agent(
     priced_on: date,
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
     reflect_before_writes: bool = True,
+    check_answer: AnswerCheck | None = None,
+    max_answer_retries: int = DEFAULT_MAX_ANSWER_RETRIES,
 ) -> AgentRun:
     """Drive one task to completion, emitting a trace step for every move."""
     by_name = {tool.name: tool for tool in tools}
     turns: list[Turn] = [UserTurn(text=task)]
 
     step_no = 0
+    answer_retries = 0
     totals = _UsageTotals()
     # What the agent has actually seen. The reflection step is given this
     # rather than the conversation, so it judges the proposal against evidence
@@ -95,14 +114,56 @@ def run_agent(
         )
 
         if not response.wants_tools:
-            return AgentRun(
-                outcome="resolved",
-                summary=response.text,
-                steps=step_no,
-                iterations=iteration,
-                usage=totals.usage,
-                cost_usd=totals.cost_usd,
+            complaint = check_answer(response.text) if check_answer else None
+
+            if complaint is None:
+                return AgentRun(
+                    outcome="resolved",
+                    summary=response.text,
+                    steps=step_no,
+                    iterations=iteration,
+                    usage=totals.usage,
+                    cost_usd=totals.cost_usd,
+                )
+
+            answer_retries += 1
+            # `reflection` rather than a kind of its own: it is the agent being
+            # checked against evidence rather than trusted, which is what that
+            # kind already means. No tokens, because no model call was made —
+            # this is a subset test, not a judgement.
+            emit(
+                kind="reflection",
+                label="Answer check · rejected",
+                detail=complaint,
+                content={"attempt": answer_retries, "accepted": False},
             )
+
+            if answer_retries > max_answer_retries:
+                emit(
+                    kind="escalation",
+                    label="Escalation",
+                    detail=(
+                        "The agent could not produce an answer that passed its own "
+                        "check. Routed to the human queue rather than delivered."
+                    ),
+                    content={"reason": "answer_check", "attempts": answer_retries},
+                )
+                return AgentRun(
+                    outcome="escalated",
+                    summary=f"Escalated: {complaint}",
+                    steps=step_no,
+                    iterations=iteration,
+                    usage=totals.usage,
+                    cost_usd=totals.cost_usd,
+                )
+
+            # Handed back rather than aborted — the same recovery path a failing
+            # tool and a blocked write already use. A model that mis-copied a
+            # handle fixes it here instead of sending a person a bad answer or
+            # sending a person the whole task.
+            turns.append(AssistantTurn(text=response.text, raw_blocks=response.raw_blocks))
+            turns.append(UserTurn(text=complaint))
+            continue
 
         results: list[ToolResult] = []
         for call in response.tool_calls:

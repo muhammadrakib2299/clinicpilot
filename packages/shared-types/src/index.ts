@@ -12,9 +12,15 @@ export const AgentStatus = z.enum(["active", "degraded", "paused"]);
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
 /**
- * `reflection` is a self-check the agent runs on itself before a high-stakes
- * write — a distinct thing from `reason`, and the one an audit reviewer most
- * wants to find next to an `action`.
+ * `reflection` is the agent being checked rather than trusted — a distinct
+ * thing from `reason`, and the one an audit reviewer most wants to find next
+ * to an `action`.
+ *
+ * Two shapes wear it. Before a high-stakes write it is a second model call
+ * given the observations rather than the conversation. Before an answer is
+ * delivered it is a mechanical check on what that answer cites, which spends
+ * no tokens. Both are the system declining to take the agent's word for it,
+ * which is what makes them one kind rather than two.
  */
 export const TraceKind = z.enum([
   "reason",

@@ -268,3 +268,146 @@ class FakeSink:
         self.outcome = outcome
 
     def close(self) -> None: ...
+
+
+class TestTheAnswerCheck:
+    """A citation is the part a reader trusts without checking.
+
+    Which makes a fabricated one worse than no citation at all, and makes this
+    the guard that stands in for the pre-write self-check the other two agents
+    get. It is mechanical — a subset test, no model call, no judgement.
+    """
+
+    def executor(self, served: list[str]):
+        execute = executor_returning([hit(citation, "Some text.") for citation in served])
+        if served:
+            execute(call(query="cancellation notice"))
+        return execute
+
+    def test_an_answer_citing_what_it_read_is_accepted(self) -> None:
+        execute = self.executor(["appointments#3"])
+
+        assert execute.check_answer("Give 24 hours' notice. [appointments#3]") is None
+
+    def test_an_answer_citing_something_never_returned_is_rejected(self) -> None:
+        execute = self.executor(["appointments#3"])
+
+        complaint = execute.check_answer("Cancellations are free. [refunds#7]")
+
+        assert complaint is not None
+        assert "[refunds#7]" in complaint
+
+    def test_the_complaint_lists_what_the_agent_may_actually_cite(self) -> None:
+        # Actionable, not just a refusal: the model can fix this on the next
+        # turn, which is the whole reason it is fed back rather than aborted.
+        execute = self.executor(["appointments#3", "opening-hours#1"])
+
+        complaint = execute.check_answer("We are shut on Sundays. [made-up#2]")
+
+        assert "[appointments#3]" in complaint
+        assert "[opening-hours#1]" in complaint
+
+    def test_citing_anything_before_searching_is_rejected_and_says_to_search(self) -> None:
+        complaint = self.executor([]).check_answer("We open at eight. [opening-hours#1]")
+
+        assert complaint is not None
+        assert "Search the documents first" in complaint
+
+    def test_an_answer_with_no_citations_at_all_is_allowed(self) -> None:
+        # "The documents do not cover this" is a correct answer with nothing to
+        # cite. Requiring a citation would make the honest refusal the one
+        # thing the agent could not say.
+        execute = self.executor(["appointments#3"])
+
+        assert execute.check_answer("Our documents do not cover parking, sorry.") is None
+
+    def test_passages_from_any_earlier_search_still_count(self) -> None:
+        # The agent is told to search several times. A passage read in the
+        # first search is legitimately citable in an answer about the third.
+        execute = executor_returning([hit("opening-hours#1", "We open at eight.")])
+        execute(call(query="opening hours"))
+        execute(call(query="something else"))
+
+        assert execute.check_answer("Eight in the morning. [opening-hours#1]") is None
+
+
+class TestTheAnswerCheckInsideARun:
+    def run(self, responses: list[LlmResponse], hits: list[dict]):
+        sink = FakeSink()
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=hits)
+
+        result = run_task(
+            task_id="t-1",
+            task_input="How much notice do I need to cancel?",
+            agent_kind="docqa",
+            provider=RecordedProvider(responses=responses),
+            sink=sink,
+            fhir=object(),
+            documents=gateway(handler),
+            priced_on=PRICED_ON,
+            redact=False,
+        )
+        return result, sink
+
+    def test_a_bad_citation_is_handed_back_and_the_model_can_fix_it(self) -> None:
+        # The same recovery path a failing tool and a blocked write use. A
+        # mis-copied handle costs one model call, not a person's afternoon.
+        result, sink = self.run(
+            responses=[
+                tool_use("search_documents", {"query": "cancellation notice"}),
+                answer("Give 24 hours' notice. [cancellation-policy#9]"),
+                answer("Give 24 hours' notice. [appointments#3]"),
+            ],
+            hits=[hit("appointments#3", "Please give at least 24 hours' notice.")],
+        )
+
+        assert result.outcome == "resolved"
+        assert result.summary.endswith("[appointments#3]")
+
+        rejections = [step for step in sink.steps if step.label.startswith("Answer check")]
+        assert len(rejections) == 1
+        assert rejections[0].kind == "reflection"
+
+    def test_the_rejection_costs_no_tokens_because_it_is_not_a_model_call(self) -> None:
+        _, sink = self.run(
+            responses=[
+                tool_use("search_documents", {"query": "cancellation"}),
+                answer("Twenty-four hours. [invented#1]"),
+                answer("Twenty-four hours. [appointments#3]"),
+            ],
+            hits=[hit("appointments#3", "Please give at least 24 hours' notice.")],
+        )
+
+        [rejection] = [step for step in sink.steps if step.label.startswith("Answer check")]
+        assert rejection.tokens_in is None
+        assert rejection.cost_usd is None
+
+    def test_an_agent_that_keeps_inventing_citations_escalates(self) -> None:
+        # Rather than delivering it, and rather than burning the whole
+        # iteration budget to reach the same conclusion more slowly.
+        result, sink = self.run(
+            responses=[
+                tool_use("search_documents", {"query": "cancellation"}),
+                answer("Free cancellation. [refunds#1]"),
+                answer("Free cancellation. [refunds#2]"),
+            ],
+            hits=[hit("appointments#3", "Please give at least 24 hours' notice.")],
+        )
+
+        assert result.outcome == "escalated"
+        assert sink.status == "escalated"
+        assert sink.steps[-1].kind == "escalation"
+        assert sink.steps[-1].content == {"reason": "answer_check", "attempts": 2}
+
+    def test_a_clean_answer_is_never_delayed_by_the_check(self) -> None:
+        _, sink = self.run(
+            responses=[
+                tool_use("search_documents", {"query": "cancellation"}),
+                answer("Twenty-four hours. [appointments#3]"),
+            ],
+            hits=[hit("appointments#3", "Please give at least 24 hours' notice.")],
+        )
+
+        assert not [step for step in sink.steps if step.label.startswith("Answer check")]
