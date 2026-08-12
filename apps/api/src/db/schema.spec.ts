@@ -1,13 +1,23 @@
 import {
   AgentKind,
   AgentStatus,
+  EMBEDDING_DIMENSIONS,
   PlanCode,
   TaskChannel,
   TaskStatus,
   TraceKind,
 } from "@clinicpilot/shared-types";
 
-import { agentKind, agentStatus, planCode, taskChannel, taskStatus, traceKind } from "./schema";
+import {
+  agentKind,
+  agentStatus,
+  documentChunks,
+  planCode,
+  taskChannel,
+  taskStatus,
+  traceKind,
+  TENANT_SCOPED_TABLES,
+} from "./schema";
 
 /**
  * The zod schemas are the wire contract and the pgEnums are the storage
@@ -36,5 +46,27 @@ describe("schema invariants", () => {
     // Guards against someone adding a status column as free text later.
     expect(taskStatus.enumValues).toContain("escalated");
     expect(traceKind.enumValues).toContain("escalation");
+  });
+
+  /**
+   * The embedding column and the wire contract are the same number in two
+   * places. Postgres would eventually object to a wrong-length vector, but
+   * only at INSERT — after a document has been read, chunked and embedded, and
+   * with an error from the driver rather than from anything that knows why.
+   */
+  it("sizes the embedding column from the wire contract", () => {
+    // The rendered SQL type rather than the column's config, because that
+    // string is what drizzle-kit writes into the migration.
+    expect(documentChunks.embedding.getSQLType()).toBe(`vector(${EMBEDDING_DIMENSIONS})`);
+  });
+
+  /**
+   * Every tenant-scoped table has to be named here, because that list is what
+   * the isolation suite iterates. A new table that is missing from it is not
+   * covered by any RLS assertion, and nothing else would notice.
+   */
+  it("lists both document tables as tenant-scoped", () => {
+    expect(TENANT_SCOPED_TABLES).toContain("documents");
+    expect(TENANT_SCOPED_TABLES).toContain("document_chunks");
   });
 });

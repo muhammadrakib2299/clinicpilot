@@ -11,7 +11,9 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
+import { EMBEDDING_DIMENSIONS } from "@clinicpilot/shared-types";
 
 /**
  * Phase 1 spine of the data model in 06-ARCHITECTURE-SCALABILITY.md.
@@ -208,6 +210,80 @@ export const messages = pgTable(
   ],
 );
 
+/**
+ * A clinic document the Document Q&A agent may answer from.
+ *
+ * Deliberately not patient data. These are policies, opening hours and
+ * preparation instructions — the things a receptionist answers forty times a
+ * day — which is why this agent can be given a retrieval tool at all. A
+ * corpus containing records would need a different access story than "every
+ * member of the tenant can read it".
+ *
+ * `slug` is the half of a citation a human reads, so it is stable and
+ * tenant-unique: re-ingesting a document replaces its chunks in place rather
+ * than accumulating a second copy the retriever would then rank against the
+ * first.
+ */
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    /** Where the text came from — a repo path today, a URL or upload later. */
+    source: text("source"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("documents_tenant_slug_key").on(table.tenantId, table.slug)],
+);
+
+/**
+ * One retrievable passage, and the vector it is found by.
+ *
+ * `embeddingModel` is stored per chunk because cosine distance between vectors
+ * from two different models is not an error — it is a plausible-looking float.
+ * Retrieval would keep working and keep being wrong, which is the failure mode
+ * this codebase has already been bitten by once (a `+` in a FHIR search param
+ * that returned every slot instead of none). Search filters on it, so a chunk
+ * embedded by an older model is invisible rather than silently comparable.
+ *
+ * Changing embedding model therefore means a migration *and* a re-ingest.
+ * That is inherent to vector search, not a limitation of this schema.
+ */
+export const documentChunks = pgTable(
+  "document_chunks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    /** Position in the document. `slug#ordinal` is the citation the agent quotes. */
+    ordinal: integer("ordinal").notNull(),
+    /** Nearest heading above the passage, so a citation can name a section. */
+    heading: text("heading"),
+    text: text("text").notNull(),
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }).notNull(),
+    embeddingModel: text("embedding_model").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_chunks_document_ordinal_key").on(table.documentId, table.ordinal),
+    index("document_chunks_tenant_idx").on(table.tenantId),
+    // No vector index, on purpose. A seeded clinic has a few hundred chunks,
+    // where an exact scan is both faster than an approximate index and exactly
+    // correct; ivfflat additionally needs to be built against representative
+    // data to be anything but harmful. Add HNSW when a tenant's chunk count
+    // reaches five figures, and measure before believing it helped.
+  ],
+);
+
 export const agents = pgTable(
   "agents",
   {
@@ -362,8 +438,23 @@ export const llmUsageRelations = relations(llmUsage, ({ one }) => ({
   task: one(tasks, { fields: [llmUsage.taskId], references: [tasks.id] }),
 }));
 
+export const documentsRelations = relations(documents, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [documents.tenantId], references: [tenants.id] }),
+  chunks: many(documentChunks),
+}));
+
+export const documentChunksRelations = relations(documentChunks, ({ one }) => ({
+  document: one(documents, { fields: [documentChunks.documentId], references: [documents.id] }),
+  tenant: one(tenants, { fields: [documentChunks.tenantId], references: [tenants.id] }),
+}));
+
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type DocumentChunk = typeof documentChunks.$inferSelect;
+export type NewDocumentChunk = typeof documentChunks.$inferInsert;
 
 export type Tenant = typeof tenants.$inferSelect;
 export type User = typeof users.$inferSelect;
@@ -396,4 +487,6 @@ export const TENANT_SCOPED_TABLES = [
   "memberships",
   "audit_log",
   "messages",
+  "documents",
+  "document_chunks",
 ] as const;

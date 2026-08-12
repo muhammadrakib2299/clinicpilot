@@ -29,6 +29,20 @@ export type TraceKind = z.infer<typeof TraceKind>;
 export const AgentKind = z.enum(["scheduling", "followup", "docqa"]);
 export type AgentKind = z.infer<typeof AgentKind>;
 
+/**
+ * How many floats a document embedding has.
+ *
+ * A wire constant rather than a database detail, because the vector is
+ * produced in Python and stored by TypeScript, and the two ends have to agree
+ * before Postgres gets a chance to complain. The gateway checks incoming
+ * vectors against it so a mismatch is a 400 naming both lengths, rather than a
+ * raw `expected 384 dimensions, not 1024` from the driver.
+ *
+ * Changing it means a migration and a full re-ingest — existing vectors are
+ * not convertible. See the `document_chunks` schema comment.
+ */
+export const EMBEDDING_DIMENSIONS = 384;
+
 export const PlanCode = z.enum(["free", "pro", "clinic", "enterprise"]);
 export type PlanCode = z.infer<typeof PlanCode>;
 
