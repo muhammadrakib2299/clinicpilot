@@ -41,6 +41,27 @@
   --info: #0ea5e9;
 }
 
+/*
+ * Light is a first-class theme, not a tint of the dark one.
+ *
+ * The status hues below are *not* the dark theme's. Emerald-500 and amber-500
+ * are tuned for a near-black canvas; on white they measure 2.5:1 and 2.2:1,
+ * well under the 4.5:1 AA floor for text — and every task status, escalation
+ * label and audit mutation is rendered as coloured text. Inheriting them was a
+ * real contrast failure on half the app, not a matter of taste.
+ *
+ * These are the darkened equivalents, measured against the lightest surface
+ * they can land on (`surface-2`, the nested/hover fill), because that is the
+ * worst case rather than the average one:
+ *
+ *   success #047857  5.2:1    warning #92400e  6.4:1
+ *   danger  #be123c  5.9:1    info    #0369a1  5.6:1
+ *
+ * Warning goes to amber-800 rather than amber-700 (4.5:1 exactly) so nesting
+ * one more surface cannot quietly reintroduce the failure. Hue legibility is
+ * not load-bearing here — status is always dot + label + icon, never colour
+ * alone.
+ */
 :root[data-theme="light"] {
   --bg: #f7f8fa;
   --surface-1: #ffffff;
@@ -51,6 +72,10 @@
   --muted: #5a6372;
   --accent: #2563eb;
   --accent-fg: #ffffff;
+  --success: #047857;
+  --warning: #92400e;
+  --danger: #be123c;
+  --info: #0369a1;
 }
 
 * {
