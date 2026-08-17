@@ -75,13 +75,21 @@ function Shell() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-text">
+      {/* Ten nav links sit between the page load and the content. */}
+      <a
+        href="#main"
+        className="skip-link rounded-md border border-border-strong bg-surface-1 px-3 py-2 text-sm font-medium"
+      >
+        Skip to main content
+      </a>
+
       <Sidebar openEscalations={queued?.open ?? 0} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
         />
-        <main className="flex-1 overflow-y-auto">
+        <main id="main" tabIndex={-1} className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<DashboardPage onOpenTask={setOpenTaskId} />} />
             <Route path="/tasks" element={<TasksPage onOpenTask={setOpenTaskId} />} />

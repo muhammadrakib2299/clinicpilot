@@ -251,7 +251,7 @@ function EscalationCard({
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="What did you do? e.g. 'Called the patient, booked them for Thursday'"
-            className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm outline-none focus:border-border-strong"
+            className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm focus:border-border-strong"
           />
           <button
             type="submit"

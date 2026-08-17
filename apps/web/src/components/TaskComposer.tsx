@@ -47,7 +47,7 @@ export function TaskComposer({ onTaskCreated }: { onTaskCreated: (taskId: string
           onChange={(event) => setValue(event.target.value)}
           aria-label="Patient message"
           placeholder="Type a patient message…"
-          className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text outline-none placeholder:text-muted focus:border-border-strong"
+          className="min-w-0 flex-1 rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-border-strong"
         />
         <button
           type="submit"

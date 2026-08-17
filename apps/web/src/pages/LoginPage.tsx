@@ -70,7 +70,7 @@ export function LoginPage() {
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-border-strong"
+              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm focus:border-border-strong"
             />
           </label>
 
@@ -82,7 +82,7 @@ export function LoginPage() {
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-border-strong"
+              className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm focus:border-border-strong"
             />
           </label>
 

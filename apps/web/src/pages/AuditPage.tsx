@@ -120,7 +120,7 @@ export function AuditPage() {
                 onChange={(event) =>
                   setFilters((current) => ({ ...current, [field]: event.target.value }))
                 }
-                className="w-48 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-sm outline-none focus:border-border-strong"
+                className="w-48 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-sm focus:border-border-strong"
               />
             </label>
           ))}

@@ -97,6 +97,37 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * One focus ring, everywhere, and nothing may opt out of it.
+ *
+ * The inputs used to pair `outline-none` with `focus:border-border-strong`,
+ * which makes the *only* indication of focus a one-pixel border going from
+ * #242a35 to #323947 — a 1.2:1 change. WCAG 2.4.11 asks for 3:1 against the
+ * adjacent colour, so that was not a subtle miss.
+ *
+ * `:focus-visible` rather than `:focus` so a mouse click on a button does not
+ * leave a ring behind; keyboard and programmatic focus still get one. The
+ * offset keeps the ring outside the hairline border instead of sitting on top
+ * of it, which is what makes it legible on a dark surface.
+ */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Keyboard users get to skip the sidebar; it is 10 links before the content. */
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 100;
+  transform: translateY(-200%);
+  transition: transform 120ms ease-out;
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 /* Tabular numerals for all metrics — the "instrument panel" feel. */
 .tnum {
   font-variant-numeric: tabular-nums;
