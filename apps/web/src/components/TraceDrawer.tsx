@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Cpu, Eye, ShieldCheck, TriangleAlert, Wrench, X, Zap } from "lucide-react";
 
 import type { TraceKind } from "@/data/mock";
@@ -26,9 +27,68 @@ const STATUS_TEXT: Record<string, string> = {
   failed: "✕ Failed",
 };
 
+/** Everything a `Tab` can land on, for the trap below. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /** The signature UX: a real agent run streaming in over a WebSocket. */
 export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
   const { steps, status, outcome, connection, totalCostUsd } = useTraceStream(taskId);
+  const panel = useRef<HTMLDivElement>(null);
+
+  // Read through a ref rather than depending on it. `onClose` is an inline
+  // arrow in the shell, so a new identity every render — as a dependency it
+  // would re-run this effect constantly, stealing focus back to the panel on
+  // every streamed step and restoring it on every teardown.
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  /**
+   * A modal has to behave like one.
+   *
+   * This covers the whole viewport and takes over the screen, but it had no
+   * dialog role, no Escape, no focus management and a backdrop that only a
+   * mouse could reach — so a keyboard user could open it and then tab straight
+   * out into the dashboard behind it, with no way back and no way to close.
+   */
+  useEffect(() => {
+    if (!taskId) return;
+
+    const restore = document.activeElement as HTMLElement | null;
+    panel.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close.current();
+        return;
+      }
+      if (event.key !== "Tab" || !panel.current) return;
+
+      const items = [...panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (items.length === 0) return;
+
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = document.activeElement;
+
+      // Wrap at both ends, and pull focus back in if it escaped some other way.
+      if (event.shiftKey && (active === first || !panel.current.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Back to whatever opened it — the table row, the activity item, the
+      // queue card — not to the top of the document.
+      restore?.focus?.();
+    };
+  }, [taskId]);
 
   if (!taskId) return null;
 
@@ -37,10 +97,20 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
-      <div className="relative flex h-full w-full max-w-xl flex-col border-l border-border bg-surface-1">
-        <div className="flex items-start justify-between border-b border-border px-5 py-4">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="trace-drawer-title"
+        tabIndex={-1}
+        className="relative flex h-full w-full max-w-xl flex-col border-l border-border bg-surface-1"
+      >
+        <div className="flex items-start justify-between border-b border-border px-4 py-4 sm:px-5">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted">
+            <div
+              id="trace-drawer-title"
+              className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted"
+            >
               Agent trace
               <span
                 className={cn(
@@ -69,7 +139,16 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
           </button>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+        {/* The steps arrive one at a time over a socket. Without a live region
+            a screen reader is told nothing at all after the drawer opens — the
+            single most important thing this app does would be silent.
+            `additions` because a step is appended, never rewritten. */}
+        <div
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-busy={!done}
+          className="flex-1 space-y-3 overflow-y-auto p-4 sm:p-5"
+        >
           {steps.length === 0 && (
             <div className="pt-8 text-center text-xs text-muted">
               {connection === "live"
@@ -135,7 +214,7 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border px-5 py-3 text-xs">
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs sm:px-5">
           <span
             className={cn(
               "font-medium",

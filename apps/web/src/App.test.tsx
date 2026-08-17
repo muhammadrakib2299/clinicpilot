@@ -456,6 +456,29 @@ describe("trace drawer", () => {
     expect(screen.getByText("Moved to Tue 10:30.")).toBeInTheDocument();
   });
 
+  it("is a dialog that Escape closes, returning focus to whatever opened it", async () => {
+    // It covers the viewport and takes over the screen. Before this it had no
+    // dialog role, no Escape, and a backdrop only a mouse could click — so a
+    // keyboard user could open it and had no way back out.
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
+    );
+    await renderSignedIn();
+
+    const send = screen.getByRole("button", { name: /send/i });
+    send.focus();
+    fireEvent.click(send);
+
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(send);
+  });
+
   it("closes the socket when the drawer closes", async () => {
     vi.stubGlobal(
       "fetch",
