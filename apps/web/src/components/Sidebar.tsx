@@ -130,7 +130,7 @@ export function Sidebar({
           <div className="min-w-0 flex-1">
             {/* A real session now, not the seeded persona this used to hardcode. */}
             <div className="truncate text-xs font-medium">{user?.name ?? "Not signed in"}</div>
-            <div className="truncate text-[11px] capitalize text-muted">{user?.role}</div>
+            <div className="truncate text-xs capitalize text-muted">{user?.role}</div>
           </div>
         </div>
       </div>

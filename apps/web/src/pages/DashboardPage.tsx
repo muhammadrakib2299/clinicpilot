@@ -69,7 +69,7 @@ function Metric({ label, value, color }: { label: string; value: string; color?:
       <div className="font-mono text-sm font-semibold tnum" style={color ? { color } : undefined}>
         {value}
       </div>
-      <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="mt-0.5 text-xs uppercase tracking-wide text-muted">{label}</div>
     </div>
   );
 }
@@ -224,7 +224,7 @@ export function DashboardPage({
           <Card className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">Plan usage</h2>
-              <span className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+              <span className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xs uppercase tracking-wide text-muted">
                 Clinic
               </span>
             </div>
@@ -243,7 +243,7 @@ export function DashboardPage({
               />
             </div>
             {/* Quotas are not enforced anywhere yet — Phase 2.5 adds metering. */}
-            <p className="mt-3 text-[11px] text-muted">
+            <p className="mt-3 text-xs text-muted">
               Limits are illustrative; enforcement lands with billing.
             </p>
           </Card>
@@ -263,13 +263,13 @@ export function DashboardPage({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-muted tnum">
+                      <span className="font-mono text-xs text-muted tnum">
                         {new Date(item.createdAt).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
                       </span>
-                      <span className="text-[11px] font-medium text-muted">{item.agentName}</span>
+                      <span className="text-xs font-medium text-muted">{item.agentName}</span>
                     </div>
                     <p
                       className={cn(

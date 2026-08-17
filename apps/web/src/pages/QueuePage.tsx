@@ -210,7 +210,7 @@ function EscalationCard({
 
           <p className="mt-2 text-sm">{entry.taskInput}</p>
           <p className="mt-1 text-xs text-muted">{entry.summary}</p>
-          <p className="mt-1 text-xs text-muted/70">{reason.detail}</p>
+          <p className="mt-1 text-xs text-muted">{reason.detail}</p>
 
           {entry.acknowledgedBy && entry.status !== "resolved" && (
             <p className="mt-2 text-xs text-info">Being worked by {entry.acknowledgedBy}</p>

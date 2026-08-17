@@ -108,7 +108,7 @@ export function LoginPage() {
 
         <div className="rounded-lg border border-border bg-surface-1 p-4">
           <h2 className="text-xs font-semibold text-muted">Demo accounts</h2>
-          <p className="mt-1 text-[11px] text-muted">
+          <p className="mt-1 text-xs text-muted">
             Password <code className="rounded bg-surface-2 px-1 font-mono">{DEMO_PASSWORD}</code>{" "}
             for all of them. The role changes what you can do.
           </p>
@@ -124,7 +124,7 @@ export function LoginPage() {
                   className="flex w-full items-baseline gap-2 rounded-md border border-transparent px-2 py-1.5 text-left hover:border-border hover:bg-surface-2"
                 >
                   <span className="w-20 shrink-0 text-xs font-medium">{account.role}</span>
-                  <span className="truncate text-[11px] text-muted">{account.can}</span>
+                  <span className="truncate text-xs text-muted">{account.can}</span>
                 </button>
               </li>
             ))}

@@ -114,7 +114,7 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
               Agent trace
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full border border-border px-1.5 py-0.5 text-[10px] normal-case",
+                  "inline-flex items-center gap-1 rounded-full border border-border px-1.5 py-0.5 text-xs normal-case",
                   connection === "live" ? "text-success" : "text-muted",
                 )}
               >
@@ -177,7 +177,7 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
                       {step.label}
                     </span>
                     {step.latencyMs != null && (
-                      <span className="shrink-0 font-mono text-[11px] text-muted tnum">
+                      <span className="shrink-0 font-mono text-xs text-muted tnum">
                         {step.latencyMs}ms
                       </span>
                     )}
@@ -186,7 +186,7 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
                     {step.detail}
                   </p>
                   {(step.tokensIn != null || step.costUsd != null) && (
-                    <div className="mt-1.5 flex gap-3 font-mono text-[11px] text-muted tnum">
+                    <div className="mt-1.5 flex gap-3 font-mono text-xs text-muted tnum">
                       {step.tokensIn != null && (
                         <span>
                           ↑{step.tokensIn} ↓{step.tokensOut} tok
