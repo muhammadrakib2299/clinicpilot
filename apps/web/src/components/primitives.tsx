@@ -1,38 +1,11 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import type { AgentStatus } from "@/data/mock";
+import type { AgentStatus } from "@/lib/types";
 
 /** Flat, hairline-bordered surface. No shadows-as-depth, no gradients. */
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
     <div className={cn("rounded-xl border border-border bg-surface-1", className)}>{children}</div>
-  );
-}
-
-/** Solid-stroke SVG sparkline — gradient-free. */
-export function Sparkline({
-  data,
-  color = "var(--accent)",
-  width = 96,
-  height = 28,
-}: {
-  data: number[];
-  color?: string;
-  width?: number;
-  height?: number;
-}) {
-  if (data.length === 0) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const span = max - min || 1;
-  const step = width / (data.length - 1);
-  const pts = data
-    .map((d, i) => `${(i * step).toFixed(1)},${(height - ((d - min) / span) * (height - 4) - 2).toFixed(1)}`)
-    .join(" ");
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none" aria-hidden>
-      <polyline points={pts} stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -55,6 +28,54 @@ export function StatusPill({ status }: { status: AgentStatus }) {
         {s.label}
       </span>
     </span>
+  );
+}
+
+/**
+ * How an agent's finished work split, as one bar.
+ *
+ * This replaced a `<Sparkline data={[1, 2, 2, 3, 3, 4]} />` on the agent card —
+ * six invented numbers drawn as if they were a trend. The gateway does not
+ * serve a time series per agent yet (Phase 4 does), so the honest visual is one
+ * built from figures it *does* return: `successRate` and `escalationRate`, which
+ * are both taken over the same denominator and therefore sum to 1.
+ *
+ * Two segments, not three: an agent with no finished tasks gets a bare track
+ * and a caption, because a full bar of "unknown" reads as data.
+ */
+export function OutcomeBar({
+  successRate,
+  escalationRate,
+}: {
+  successRate: number | null;
+  escalationRate: number | null;
+}) {
+  const known = successRate !== null && escalationRate !== null;
+  const resolved = Math.round((successRate ?? 0) * 100);
+
+  return (
+    <div>
+      <div
+        className="flex h-1.5 w-full overflow-hidden rounded-full border border-border bg-surface-2"
+        role="img"
+        aria-label={
+          known
+            ? `${resolved}% of finished tasks resolved, ${100 - resolved}% escalated`
+            : "No finished tasks yet"
+        }
+      >
+        {known && (
+          <>
+            <div style={{ width: `${resolved}%`, backgroundColor: "var(--success)" }} />
+            <div style={{ width: `${100 - resolved}%`, backgroundColor: "var(--warning)" }} />
+          </>
+        )}
+      </div>
+      <div className="mt-1.5 flex justify-between text-xs text-muted">
+        <span>{known ? "Resolved" : "Nothing finished yet"}</span>
+        {known && <span>Escalated</span>}
+      </div>
+    </div>
   );
 }
 

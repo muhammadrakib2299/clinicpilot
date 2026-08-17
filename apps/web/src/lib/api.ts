@@ -6,7 +6,7 @@ import type {
   UserRole,
 } from "@clinicpilot/shared-types";
 
-import type { AgentKind, TraceKind } from "@/data/mock";
+import type { AgentKind, TraceKind } from "@/lib/types";
 import { clearToken, getToken } from "@/lib/session";
 
 const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8080";

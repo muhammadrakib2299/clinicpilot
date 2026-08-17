@@ -1,4 +1,4 @@
-import type { TraceKind } from "@/data/mock";
+import type { TraceKind } from "@/lib/types";
 
 /**
  * Colour per trace step kind, shared by the Trace Viewer and the activity feed.

@@ -1,6 +1,6 @@
 import { AlertTriangle, Pause, Settings2, TrendingUp } from "lucide-react";
 
-import { Card, Sparkline, StatusPill, Meter } from "@/components/primitives";
+import { Card, Meter, OutcomeBar, StatusPill } from "@/components/primitives";
 import { TaskComposer } from "@/components/TaskComposer";
 import { getOverview, listAgents, type AgentSummary, type OverviewKpis } from "@/lib/api";
 import { TRACE_COLORS } from "@/lib/trace";
@@ -72,9 +72,9 @@ function AgentCard({ agent, onOpenTrace }: { agent: AgentSummary; onOpenTrace: (
 
   return (
     <Card className="p-4">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold">{agent.name}</span>
             <StatusPill status={agent.status} />
           </div>
@@ -82,13 +82,16 @@ function AgentCard({ agent, onOpenTrace }: { agent: AgentSummary; onOpenTrace: (
             {agent.tasksToday} today · {agent.totalTasks} all time
           </div>
         </div>
-        {hasRun && <Sparkline data={[1, 2, 2, 3, 3, 4]} color="var(--accent)" />}
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-3">
         <Metric label="Success" value={pct(agent.successRate)} color="var(--success)" />
         <Metric label="Escalation" value={pct(agent.escalationRate)} color="var(--warning)" />
         <Metric label="Cost/task" value={usd(agent.costPerTask, 4)} />
+      </div>
+
+      <div className="mt-3">
+        <OutcomeBar successRate={agent.successRate} escalationRate={agent.escalationRate} />
       </div>
 
       <div className="mt-4 flex gap-2">

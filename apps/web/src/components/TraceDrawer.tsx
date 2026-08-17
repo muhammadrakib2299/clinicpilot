@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Cpu, Eye, ShieldCheck, TriangleAlert, Wrench, X, Zap } from "lucide-react";
 
-import type { TraceKind } from "@/data/mock";
+import type { TraceKind } from "@/lib/types";
 import { TRACE_COLORS } from "@/lib/trace";
 import { useTraceStream } from "@/lib/useTraceStream";
 import { cn } from "@/lib/cn";
