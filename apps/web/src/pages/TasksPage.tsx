@@ -1,4 +1,6 @@
-import { Card, RefreshControl } from "@/components/primitives";
+import { Inbox } from "lucide-react";
+
+import { Card, EmptyState, RefreshControl, Skeleton } from "@/components/primitives";
 import { listTasks, type Task } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { cn } from "@/lib/cn";
@@ -107,13 +109,21 @@ export function TasksPage({ onOpenTask }: { onOpenTask: (taskId: string) => void
           </table>
         </div>
 
-        {loading && <p className="p-4 text-xs text-muted">Loading tasks…</p>}
-        {!loading && tasks.length === 0 && !error && (
-          <p className="p-4 text-xs text-muted">
-            No tasks yet. Send a message from the Dashboard to create one.
-          </p>
+        {loading && !data && (
+          <div className="space-y-3 p-4">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-6" />
+            ))}
+          </div>
         )}
       </Card>
+
+      {!loading && tasks.length === 0 && !error && (
+        <EmptyState icon={Inbox} title="No tasks yet">
+          Send a patient message from the Dashboard to create the first one. It is queued, picked
+          up by a worker, and its trace streams back here step by step.
+        </EmptyState>
+      )}
 
       {/* The queue closed this gap; what is left is the failure mode, which is
           worth naming because `queued` looks identical either way. */}

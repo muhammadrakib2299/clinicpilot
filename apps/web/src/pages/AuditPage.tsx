@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Download, ShieldAlert } from "lucide-react";
+import { Download, ScrollText, ShieldAlert } from "lucide-react";
 import type { AuditQueryInput } from "@clinicpilot/shared-types";
 
-import { Card } from "@/components/primitives";
+import { Card, EmptyState, Skeleton } from "@/components/primitives";
 import { downloadAuditCsv, listAudit, type AuditEntry } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useAuth } from "@/lib/auth";
@@ -191,14 +191,21 @@ export function AuditPage() {
           </table>
         </div>
 
-        {loading && <p className="p-4 text-xs text-muted">Loading…</p>}
-        {!loading && entries.length === 0 && !error && (
-          <p className="p-4 text-xs text-muted">
-            Nothing matches. Sign in, create a task, or run an agent — every one of those writes a
-            row here.
-          </p>
+        {loading && !data && (
+          <div className="space-y-3 p-4">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-5" />
+            ))}
+          </div>
         )}
       </Card>
+
+      {!loading && entries.length === 0 && !error && (
+        <EmptyState icon={ScrollText} title="Nothing matches">
+          Sign in, create a task, or run an agent — every one of those writes a row here. Clear the
+          filters to see the whole record.
+        </EmptyState>
+      )}
     </div>
   );
 }

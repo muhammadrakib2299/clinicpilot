@@ -1,6 +1,8 @@
 import { useState } from "react";
 
-import { Card, RefreshControl } from "@/components/primitives";
+import { CheckCircle2, LifeBuoy } from "lucide-react";
+
+import { Card, EmptyState, RefreshControl, Skeleton } from "@/components/primitives";
 import {
   acknowledgeEscalation,
   listEscalations,
@@ -123,13 +125,27 @@ export function QueuePage({ onOpenTask }: { onOpenTask: (taskId: string) => void
         ))}
       </div>
 
-      {loading && <p className="text-xs text-muted">Loading the queue…</p>}
+      {loading && !data && (
+        <div className="space-y-3">
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
+        </div>
+      )}
+
       {!loading && entries.length === 0 && !error && (
-        <Card className="p-6 text-center text-sm text-muted">
+        <EmptyState
+          icon={status === "open" ? CheckCircle2 : LifeBuoy}
+          title={
+            status === "open"
+              ? "Nothing waiting. Every escalation has been picked up."
+              : "Nothing here."
+          }
+        >
           {status === "open"
-            ? "Nothing waiting. Every escalation has been picked up."
-            : "Nothing here."}
-        </Card>
+            ? "Agents hand work back when the router refuses to route, a run does not converge, or an answer cannot be verified. None of that is outstanding."
+            : "Try another filter — the queue keeps every escalation, including the closed ones."}
+        </EmptyState>
       )}
     </div>
   );

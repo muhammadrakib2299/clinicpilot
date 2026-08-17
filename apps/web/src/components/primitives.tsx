@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AgentStatus } from "@/lib/types";
 
@@ -29,6 +29,52 @@ export function StatusPill({ status }: { status: AgentStatus }) {
         {s.label}
       </span>
     </span>
+  );
+}
+
+/**
+ * A loading placeholder shaped like the thing that is coming.
+ *
+ * Deliberately a pulse rather than the usual sweeping shimmer: a shimmer is a
+ * moving gradient, and `04-UI-UX.md` makes "no gradients, anywhere" a binding
+ * rule rather than a preference. Opacity on a flat `surface-2` block reads the
+ * same and keeps the rule. The global `prefers-reduced-motion` block already
+ * stops it moving for anyone who asked.
+ *
+ * `aria-hidden` because the screen it is standing in for announces its own
+ * loading state; a screen reader does not need seven grey rectangles.
+ */
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden className={cn("animate-pulse rounded-md bg-surface-2", className)} />;
+}
+
+/**
+ * An empty state with something to look at and something to do.
+ *
+ * The fine 1px grid is the "signature futuristic detail" the design doc calls
+ * for on empty surfaces. It has been sitting in `index.css` as `.grid-backdrop`
+ * since Phase 0 with no caller — this is it.
+ */
+export function EmptyState({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Card className="relative overflow-hidden px-6 py-12 text-center">
+      <div className="grid-backdrop pointer-events-none absolute inset-0" aria-hidden />
+      <div className="relative flex flex-col items-center">
+        <div className="flex size-10 items-center justify-center rounded-md border border-border bg-surface-2 text-muted">
+          <Icon className="size-4" aria-hidden />
+        </div>
+        <p className="mt-3 text-sm font-medium">{title}</p>
+        {children && <div className="mt-1.5 max-w-sm text-sm text-muted">{children}</div>}
+      </div>
+    </Card>
   );
 }
 

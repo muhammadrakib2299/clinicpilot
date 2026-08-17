@@ -1,6 +1,13 @@
 import { AlertTriangle, Pause, Settings2, TrendingUp } from "lucide-react";
 
-import { Card, Meter, OutcomeBar, RefreshControl, StatusPill } from "@/components/primitives";
+import {
+  Card,
+  Meter,
+  OutcomeBar,
+  RefreshControl,
+  Skeleton,
+  StatusPill,
+} from "@/components/primitives";
 import { TaskComposer } from "@/components/TaskComposer";
 import { getOverview, listAgents, type AgentSummary, type OverviewKpis } from "@/lib/api";
 import { TRACE_COLORS } from "@/lib/trace";
@@ -159,7 +166,19 @@ export function DashboardPage({
         </Card>
       )}
 
-      {overview.data && <Kpis kpis={overview.data.kpis} />}
+      {overview.data ? (
+        <Kpis kpis={overview.data.kpis} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Card key={i} className="space-y-3 p-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-7 w-20" />
+              <Skeleton className="h-3 w-32" />
+            </Card>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
@@ -179,7 +198,18 @@ export function DashboardPage({
                 }}
               />
             ))}
-            {agents.loading && <p className="text-xs text-muted">Loading agents…</p>}
+            {agents.loading &&
+              [0, 1, 2].map((i) => (
+                <Card key={i} className="space-y-4 p-4">
+                  <Skeleton className="h-4 w-40" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <Skeleton className="h-11" />
+                    <Skeleton className="h-11" />
+                    <Skeleton className="h-11" />
+                  </div>
+                  <Skeleton className="h-8" />
+                </Card>
+              ))}
           </div>
         </div>
 
@@ -252,8 +282,11 @@ export function DashboardPage({
                   </div>
                 </button>
               ))}
+              {overview.loading &&
+                !overview.data &&
+                [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-8" />)}
               {!overview.loading && overview.data?.activity.length === 0 && (
-                <p className="text-xs text-muted">
+                <p className="text-sm text-muted">
                   No activity yet — send a message to create the first task.
                 </p>
               )}
