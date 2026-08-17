@@ -518,6 +518,52 @@ describe("trace drawer", () => {
     expect(window.location.search).toBe("");
   });
 
+  it("renders a finished trace even when the socket never opens", async () => {
+    // The backfill used to live inside the socket's `open` handler. A gateway
+    // whose WebSocket was blocked — a proxy, a firewall, a restart — therefore
+    // showed an empty drawer for a run that had already finished and whose
+    // entire trace was sitting there over plain HTTP.
+    window.history.replaceState(null, "", `/?trace=${TASK.id}`);
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({
+        ...BASE_HANDLERS,
+        [`/api/tasks/${TASK.id}`]: {
+          task: { ...TASK, status: "resolved", outcome: "Moved to Tue 10:30." },
+          steps: [step()],
+        },
+      }),
+    );
+    await renderSignedIn();
+
+    await waitFor(() => expect(screen.getByText("Reason")).toBeInTheDocument());
+    expect(screen.getByText("✓ Resolved")).toBeInTheDocument();
+    // Never opened: the steps came from HTTP alone.
+    expect(FakeWebSocket.instances[0]?.readyState).toBe(FakeWebSocket.CONNECTING);
+  });
+
+  it("does not let a late backfill undo a newer status from the stream", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] }, "/api/tasks": TASK }),
+    );
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+    const socket = FakeWebSocket.instances[0]!;
+
+    await act(async () =>
+      socket.receive({
+        event: "task:status",
+        data: { taskId: TASK.id, status: "resolved", outcome: "Moved to Tue 10:30." },
+      }),
+    );
+    // Opening triggers a second backfill, which still reports `running`.
+    await act(async () => socket.open());
+
+    expect(screen.getByText("✓ Resolved")).toBeInTheDocument();
+  });
+
   it("closes the socket when the drawer closes", async () => {
     vi.stubGlobal(
       "fetch",
