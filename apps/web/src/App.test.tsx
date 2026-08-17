@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -202,6 +202,19 @@ describe("app shell", () => {
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
     fireEvent.click(screen.getByLabelText("Toggle theme"));
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  });
+
+  it("remembers a chosen theme across a reload", async () => {
+    // It used to be `useState("dark")`, so every reload threw the choice away.
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
+    await renderSignedIn();
+    fireEvent.click(screen.getByLabelText("Toggle theme"));
+
+    cleanup();
+    document.documentElement.removeAttribute("data-theme");
+    await renderSignedIn();
+
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 

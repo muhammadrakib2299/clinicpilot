@@ -26,6 +26,9 @@
 /* Dark is the primary/default theme (control-plane aesthetic). */
 :root,
 :root[data-theme="dark"] {
+  /* Tells the browser to theme what CSS cannot reach: scrollbar gutters,
+     autofill backgrounds, native date/select popups, form control chrome. */
+  color-scheme: dark;
   --bg: #0a0c10;
   --surface-1: #12151c;
   --surface-2: #181c25;
@@ -63,6 +66,7 @@
  * alone.
  */
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f7f8fa;
   --surface-1: #ffffff;
   --surface-2: #f1f3f6;

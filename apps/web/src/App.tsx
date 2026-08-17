@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { Sidebar } from "@/components/Sidebar";
@@ -13,6 +13,7 @@ import { TasksPage } from "@/pages/TasksPage";
 import { countEscalations } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { useApi } from "@/lib/useApi";
+import { useTheme } from "@/lib/theme";
 
 /** Screens the sidebar advertises but that this phase does not implement. */
 const PLACEHOLDERS = [
@@ -61,17 +62,13 @@ const PLACEHOLDERS = [
 ];
 
 function Shell() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const { theme, toggle: toggleTheme } = useTheme();
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
 
   // The badge is loaded here rather than in the Sidebar so acting on the queue
   // can refresh it — a count that stays at 4 after you clear it is worse than
   // no count at all.
   const { data: queued, reload: reloadQueue } = useApi(countEscalations, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-text">
@@ -85,10 +82,7 @@ function Shell() {
 
       <Sidebar openEscalations={queued?.open ?? 0} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar
-          theme={theme}
-          onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-        />
+        <Topbar theme={theme} onToggleTheme={toggleTheme} />
         <main id="main" tabIndex={-1} className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<DashboardPage onOpenTask={setOpenTaskId} />} />
