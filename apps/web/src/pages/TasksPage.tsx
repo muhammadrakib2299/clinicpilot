@@ -41,13 +41,26 @@ export function TasksPage({ onOpenTask }: { onOpenTask: (taskId: string) => void
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
+            <caption className="sr-only">
+              Tasks submitted to the agent fleet. Open a task to replay its trace.
+            </caption>
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Message</th>
-                <th className="px-4 py-3 font-medium">Channel</th>
-                <th className="px-4 py-3 font-medium">Created</th>
-                <th className="px-4 py-3 font-medium">Outcome</th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Status
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Message
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Channel
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Created
+                </th>
+                <th scope="col" className="px-4 py-3 font-medium">
+                  Outcome
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -67,7 +80,24 @@ export function TasksPage({ onOpenTask }: { onOpenTask: (taskId: string) => void
                       {task.status}
                     </span>
                   </td>
-                  <td className="max-w-[24rem] truncate px-4 py-3">{task.input}</td>
+                  {/*
+                   * The row keeps its click handler because that is what a
+                   * mouse expects of a table like this, but a `<tr onClick>` is
+                   * invisible to a keyboard: not focusable, no role, no Enter.
+                   * The real control is this button, so the row has exactly one
+                   * tab stop and its accessible name is the message itself.
+                   */}
+                  <td className="max-w-[24rem] px-4 py-3">
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenTask(task.id);
+                      }}
+                      className="block max-w-full truncate rounded text-left hover:underline"
+                    >
+                      {task.input}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-xs text-muted">{task.channel}</td>
                   <td className="px-4 py-3 font-mono text-xs text-muted tnum">
                     {new Date(task.createdAt).toLocaleString()}

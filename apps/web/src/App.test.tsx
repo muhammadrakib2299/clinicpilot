@@ -496,6 +496,28 @@ describe("trace drawer", () => {
   });
 });
 
+describe("task inbox", () => {
+  it("puts a real control in every row rather than a click handler on the <tr>", async () => {
+    // `<tr onClick>` is invisible to a keyboard — not focusable, no role, no
+    // Enter. The whole inbox was mouse-only.
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({
+        ...BASE_HANDLERS,
+        [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [] },
+        "/api/tasks": [TASK],
+      }),
+    );
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /Tasks/ }));
+
+    const open = await screen.findByRole("button", { name: TASK.input });
+    fireEvent.click(open);
+
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+  });
+});
+
 describe("the human queue", () => {
   /** Signs in, then navigates to the queue via the nav link. */
   async function openQueue(handlers: Record<string, unknown>) {

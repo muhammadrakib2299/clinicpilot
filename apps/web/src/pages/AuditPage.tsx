@@ -151,13 +151,16 @@ export function AuditPage() {
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-sm">
+            <caption className="sr-only">
+              Append-only record of every action taken in this organisation.
+            </caption>
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3 font-medium">When</th>
-                <th className="px-4 py-3 font-medium">Actor</th>
-                <th className="px-4 py-3 font-medium">Action</th>
-                <th className="px-4 py-3 font-medium">Resource</th>
-                <th className="px-4 py-3 font-medium">IP</th>
+                {["When", "Actor", "Action", "Resource", "IP"].map((heading) => (
+                  <th key={heading} scope="col" className="px-4 py-3 font-medium">
+                    {heading}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
