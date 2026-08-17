@@ -58,8 +58,12 @@ Granular, ordered, ready to execute. Checkboxes map to the phases in [`08-PLAN.m
       outage in that window leaves a task nothing will pick up (the response
       says so via `queued: false`, and the CLI can drive it). The fix is an
       outbox: write the job to Postgres in the same transaction and relay it
-- [ ] No reconnect/backoff on the Trace Viewer WebSocket — a dropped socket
-      shows `closed` until the drawer is reopened
+- [x] ~~No reconnect/backoff on the Trace Viewer WebSocket~~ — paid 2026-08-17.
+      A dropped socket redials with exponential backoff to 15s and stops once
+      the run is terminal. Paid alongside a worse bug found the same way: the
+      HTTP backfill lived *inside* the socket's `open` handler, so a blocked
+      WebSocket showed an **empty drawer for a finished run** whose whole trace
+      was one request away. It now backfills immediately and again on open
 
 ## Phase 1 — Vertical Slice: Scheduling Agent ⭐ **~90% — the loop is closed**
 
@@ -133,10 +137,19 @@ the auth that Phase 2 owns anyway.
       **met 2026-07-29**, 3 iterations, 9 steps, $0.0153, appointment moved on HAPI
 
 ### Still fixture in the UI
-- [ ] Search box (⌘K), notifications bell — chrome with no backing. The org
-      switcher is real (Phase 2); the bell is the one that now has something
-      to point at, since the human queue exists for it to notify about
-- [ ] Sidebar persona "Priya Nair" — labelled `Admin · demo`; real once auth lands
+- [x] ~~Search box (⌘K), notifications bell~~ — the bell and search were removed
+      in Phase 2 rather than left looking clickable. The sidebar's escalation
+      badge now polls every 30s, which is the notification the bell was
+      standing in for. A ⌘K palette remains unbuilt and unadvertised
+- [x] ~~Sidebar persona "Priya Nair"~~ — a real session since Phase 2
+- [x] ~~`data/mock.ts`~~ — deleted 2026-08-17. 119 lines of Phase-0 fixtures
+      that nothing rendered any more, though four modules still imported their
+      *types* from a file called "mock"; those moved to `lib/types.ts`. The one
+      fixture still on screen went with it: the agent card drew
+      `<Sparkline data={[1, 2, 2, 3, 3, 4]} />` — six invented numbers as a
+      trend line, directly above the three tiles built to report only what the
+      system measures. Replaced by a bar computed from `successRate` and
+      `escalationRate`, which share a denominator
 
 ## Phase 2 — Multi-tenancy, RBAC & Audit ✅ **COMPLETE** (closed out 2026-08-11)
 - [x] Add `tenant_id` to all tenant-scoped tables
@@ -263,17 +276,83 @@ the first time that has been true.
       (The 401 did confirm one thing by accident — `FallbackProvider` did not
       retry it, which is ADR-003's rule that 4xx never fails over)
 
-## Phase 4 — Analytics, Observability & Polish
-- [ ] Analytics: tasks/day, success vs escalation per agent (Recharts)
+## Phase 4 — Analytics, Observability & Polish ⭐ **started early: the UI foundation pass landed 2026-08-17**
+- [ ] Analytics: tasks/day, success vs escalation per agent (Recharts) — needs a
+      `GET /api/analytics`; `traces` and `llm_usage` already hold everything
 - [ ] Cost analytics: $/resolved task, per agent/tenant, spend charts
 - [ ] KPI tiles: no-show delta, calls deflected, follow-ups completed
 - [ ] OpenTelemetry tracing api→ai→n8n→fhir
 - [ ] Prometheus/Grafana: p50/p95 latency, queue depth, error/cost rate
 - [ ] Eval harness: datasets + scoring; commit a results report
 - [ ] FHIR Explorer: patient/appt browser + raw resource JSON viewer
-- [ ] Design-system pass; dark mode; `prefers-reduced-motion`
-- [ ] Accessibility audit (keyboard, contrast, ARIA live regions) → WCAG AA
+- [x] Design-system pass; dark mode; `prefers-reduced-motion` — **done
+      2026-08-17.** `prefers-reduced-motion` was already respected. The pass
+      found the light theme had been failing WCAG since Phase 0: four semantic
+      tokens (`success`/`warning`/`danger`/`info`) were never redefined for it
+      and inherited dark-tuned values onto white at **2.2–2.5:1** against a
+      4.5:1 floor — and those are text colours, on every task status and
+      escalation label. Theme now persists and starts from the OS preference;
+      `.grid-backdrop` finally has a caller; nothing renders below the 12px the
+      type scale defines; skeletons pulse rather than shimmer, because a
+      shimmer is a moving gradient and the no-gradient rule is binding
+- [~] Accessibility audit (keyboard, contrast, ARIA live regions) → WCAG AA —
+      **most of the way.** Paid: one `:focus-visible` ring nothing opts out of
+      (the inputs paired `outline-none` with a 1.2:1 border change); a skip
+      link past ten nav items; the Trace Viewer is a real dialog with Escape, a
+      focus trap and focus restore; its step list is a polite live region, so
+      the streaming run is no longer silent to a screen reader; the Task Inbox
+      has a real control per row instead of `<tr onClick>`, which is not
+      focusable and has no role; `scope="col"` and captions on both tables.
+      **Outstanding:** no audit against a real screen reader, and the
+      hand-rolled primitives still have no Radix underneath — see the
+      shadcn/ui question carried since Phase 0
+- [x] **The shell is responsive** — not in the original list because nothing
+      said it was missing. `w-60 shrink-0` inside `flex h-screen overflow-hidden`
+      with no breakpoint anywhere is 64% of a 375px viewport spent on
+      navigation. Below `lg` the sidebar is now a drawer with a trigger, a
+      backdrop and Escape
+- [x] **The screens are live** — polling (10s dashboard/inbox, 20s queue, 30s
+      sidebar badge) plus refetch-on-focus, with `loading` raised only on first
+      load so nothing blinks on the interval, and no polling of a hidden tab
+- [x] **A trace has a URL** (`?trace=<taskId>`) — shareable, bookmarkable,
+      survives a reload
+- [x] **Task Inbox filters** by status, agent and free text; status and agent
+      live in the URL so a filtered inbox is linkable
 - [ ] ✅ Gate (B2/B5): MVP complete; metrics + cost visible; UI shipped-grade
+
+### Frontend gaps found in the 2026-08-17 audit, not yet closed
+- [ ] **Knowledge Base screen** — `GET /api/documents` ships and serves 6
+      documents / 43 passages per clinic. **There is no UI for it at all**, so
+      "what can the Document Q&A agent actually answer from" is still only
+      answerable by reading the seed script. Pure frontend work
+- [ ] **Patient Messages screen** — `GET /api/messages` ships with
+      `delivery_channel` and status per row. **The entire output of the
+      Follow-up Agent is invisible in the product.** Pure frontend work
+- [ ] Agents detail screen — `/api/agents` already returns per-agent stats; the
+      nav item is still a placeholder and Configure/Pause render disabled
+- [ ] Pagination — `listTasks()` and `listAudit()` fetch everything, every time
+- [ ] Toasts / optimistic updates — every action is a full reload
+- [ ] Replace `useApi` with TanStack Query once a screen needs real cache
+      invalidation (still not that screen)
+
+### SEO / GEO / AI-crawler surface — **nothing exists, and nothing can**
+The app is entirely behind the login gate: `Gate()` renders the login screen
+when signed out, so there are **no public routes**. A crawler gets an empty
+`<div id="root">`. This is not a tuning problem, it is a missing surface.
+- [ ] A public, prerendered marketing + docs surface (landing, features,
+      architecture write-up, demo CTA) — without one there is nothing to
+      optimise
+- [ ] `<meta name="description">`, canonical, Open Graph, Twitter card,
+      `theme-color`, JSON-LD — `index.html` has none of them
+- [ ] **A favicon.** There is not a single icon file in the repo
+- [ ] `robots.txt`, `sitemap.xml`, `llms.txt`
+- [ ] SSR or prerender. GPTBot, ClaudeBot and PerplexityBot do not execute
+      JavaScript, so a client-rendered SPA is invisible to them specifically
+- [ ] Self-host the fonts. Google Fonts is loaded render-blocking from a
+      third-party origin, costing LCP and leaking a request per visitor
+- [ ] Security headers in `nginx.conf` (CSP, HSTS, Referrer-Policy,
+      Permissions-Policy) and brotli alongside gzip
+- [ ] Route-level code splitting
 
 ## Phase 5 — Deploy & Demo
 - [ ] Deploy web to Vercel

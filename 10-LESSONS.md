@@ -87,6 +87,82 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
 
 ### Running log
 
+#### 2026-08-17 — The frontend audit: a design doc I had not been holding myself to
+- Phase: 4 (started early — the design-system and accessibility items)
+- Context: Read every file in `apps/web` looking for gaps before adding
+  features to it. The code was good and the comments were honest. What it was
+  not, was the thing `04-UI-UX.md` describes.
+- **The finding that made the point: light mode was failing contrast, and had
+  been since Phase 0.** `:root[data-theme="light"]` redefined the surfaces and
+  the accent but not `--success`, `--warning`, `--danger` or `--info`, so those
+  four fell through to the dark theme's values and rendered on white. Emerald-500
+  on `#ffffff` measures **2.5:1**; amber-500 measures **2.2:1**; the AA floor for
+  text is 4.5:1. These are not decorative — every task status, every escalation
+  label and every mutating action in the audit log is coloured text. Half the app
+  failed WCAG in a theme the doc calls "a full first-class alternative" with
+  colours it calls "WCAG-checked in both themes."
+- **The lesson is not "check contrast". It is that a design document describes
+  intent, and nothing in the pipeline was comparing intent to output.** Four
+  colours were simply never written. No test asserted it, no linter knew, and it
+  is invisible in dark mode — which is the default, which is what I develop in.
+  The same gap produced the rest of the list: `.grid-backdrop` sat in `index.css`
+  since Phase 0 as a "signature detail" with **no caller**; the type scale said
+  12px minimum and twelve places rendered at 10 or 11; "Radix/shadcn primitives
+  give correct roles and focus management out of the box" was written about
+  hand-rolled primitives that give none of it.
+- Problem: the Trace Viewer — the thing `04-UI-UX.md` calls the single most
+  memorable part of the demo — covered the viewport, dimmed the page behind it
+  and had `role` on nothing, no `aria-modal`, no Escape, no focus trap, no focus
+  restore, and a backdrop only a mouse could dismiss. A keyboard user could open
+  it and tab straight out into the dashboard underneath with no way back. The
+  Task Inbox was worse: every row was `<tr onClick>`, which is not a control at
+  all — not focusable, no role, no Enter — so the only thing the page exists to
+  do could not be done without a mouse.
+- **The shell had no breakpoint in it anywhere.** A `w-60 shrink-0` sidebar
+  inside `flex h-screen overflow-hidden` is 64% of a 375px viewport, spent on
+  navigation, permanently. The app was desktop-only and nothing in it said so.
+- What I tried: fixing the *stated* rule rather than the symptom, in every case.
+  A single `:focus-visible` rule that nothing may opt out of, rather than
+  patching the five inputs that paired `outline-none` with a 1.2:1 border
+  change. One sidebar styled by breakpoint rather than a second copy for
+  mobile — a duplicate would double every nav link in the accessibility tree.
+  Closed-on-mobile is `invisible`, not merely translated off-screen, because a
+  translated element is still focusable.
+- **What the browser found that the tests could not.** I ran the UI against a
+  stub gateway that speaks no WebSocket, opened a resolved task, and got
+  "Connecting to the trace stream…" and an empty panel — while the complete
+  trace sat one HTTP request away. The backfill lived *inside* the socket's
+  `open` handler, making the stream a precondition for reading a **past** run,
+  which it never was. Any proxy, firewall or gateway restart that blocked the
+  upgrade turned every historical trace into a blank drawer. Forty passing tests
+  never saw it, because the fake socket in the suite always opens.
+- What worked: **13 commits, each individually green**, 28 → 40 tests. Two of
+  the new tests are harness fixes rather than features — the suite kept one
+  `localStorage` and one `history` for the whole file, so a test that toggled
+  the theme or clicked a nav link silently decided the starting state for every
+  test after it. That only looked fine because the tests that navigate happened
+  to sit last.
+- **Also deleted: the last fixture.** `data/mock.ts` was 119 lines of Phase-0
+  invention that four modules still imported *types* from, and the agent card
+  was rendering `<Sparkline data={[1, 2, 2, 3, 3, 4]} />` — six made-up numbers
+  drawn as a trend line, directly above three tiles built specifically to report
+  only what the system measures. Replaced with a bar assembled from figures the
+  gateway actually returns.
+- What I'd do differently: verify the design doc's own claims the day I write
+  them down. "WCAG-checked in both themes" was aspirational when written and
+  became false the moment the light block was authored incomplete — and it then
+  sat in the repo as an assertion for six weeks. A doc that describes intent
+  needs the same treatment as a test that cannot fail.
+- Interview soundbite: *"I audited my own frontend against the design system I'd
+  written for it and found the light theme had been failing WCAG contrast since
+  day one — four status colours were never redefined, so they inherited values
+  tuned for a near-black canvas and rendered at 2.2:1 on white. It was invisible
+  because dark is the default and that's what I develop in. Then I ran the UI
+  against a gateway with no WebSocket and found the trace viewer showed nothing
+  for finished runs, because the HTTP backfill was gated behind the socket
+  opening — forty passing tests never caught it, because the fake socket in the
+  suite always opens."*
+
 #### 2026-08-12 — Three silent failures between me and a working n8n workflow
 - Phase: 3
 - Context: The last unbuilt thing in Phase 3. n8n had been in the stack since
@@ -856,6 +932,10 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-08-12 | A score threshold would tell relevant results from irrelevant ones | **A noise floor only; the prompt and the citation check do the real work** | Measured: a nonsense query scored 0.18 against the test-results document while a correct match scored 0.17. Cosine similarity over sparse vectors is comparable within one search, not across queries |
 | 2026-08-12 | Escalation is done when the agent stops and sets a status | **Done when a person is told, and the queue write is not the agent's job** | Three escalation paths all ended by setting `tasks.status = 'escalated'` and nothing watched it — correct and useless. The row is now written by the gateway inside the task-completion transaction, so no agent path can escalate without queueing |
 | 2026-08-12 | n8n would own the "reschedule appointment" workflow (planned since Phase 1) | **The gateway keeps every FHIR write; n8n gets the scheduled sweep instead** | ADR-008 made the gateway the single owner of FHIR access after a second implementation wrote a malformed `Slot/Slot/…` reference onto a live appointment. A reschedule through n8n would be a third path to that write with its own copy of the concurrency rules |
+| 2026-08-17 | A ~30-line `useApi` hook is enough; every screen loads once and refreshes on an explicit action (decided 2026-07-29) | **Same hook, plus polling and refetch-on-focus** | Still not TanStack Query — the ~13 KB buys caching this app has no use for. But "every screen refreshes on an explicit action" was a claim about the screens, and the dashboard's own subtitle says "live status". A control plane where the task you submitted finishes and no tile moves until you press a button is telling a small lie in its headline |
+| 2026-08-17 | Which trace is open is component state | **It is a URL** (`?trace=<taskId>`) | A trace is a record of something that happened; records get addresses. As state it could not be shared, bookmarked or reloaded, and a walkthrough had to say "click the third row" instead of pasting a link |
+| 2026-08-17 | Backfill the trace *after* subscribing, so no step written during the handshake is lost (decided 2026-07-29) | **Backfill immediately *and* on open** | The original reasoning was right and the placement was wrong. Gating HTTP behind the socket made the stream a precondition for reading a finished run — a blocked WebSocket showed an empty drawer for a trace that was fully available. Merging by `stepNo` means doing both costs nothing and keeps the original guarantee |
+| 2026-08-17 | Status colours are defined once and the light theme overrides what it needs | **Every semantic token is redefined per theme, or it is a bug** | Four were omitted and inherited dark-tuned values onto white at 2.2–2.5:1. A partial override is indistinguishable from a complete one until someone opens the other theme and measures |
 
 ---
 
@@ -863,10 +943,12 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. **628 tests** (231 TypeScript unit,
-  74 TypeScript integration, 299 Python). Counted by running each suite rather
-  than by adding up remembered numbers, which is how the figure here was wrong
-  twice; coverage % still not measured — wire `test:cov` thresholds in Phase 6.
+  postgres, redis, n8n) across 5 workspaces. The web suite is **40 tests**
+  (counted 2026-08-17, up from 28). The repo total previously recorded here was
+  628, but its own breakdown — 231 + 74 + 299 — sums to 604, so **the total needs
+  a recount across all five workspaces rather than another adjustment by
+  arithmetic**; that is precisely the mistake this line has already made twice.
+  Coverage % still not measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%
