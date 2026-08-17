@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AgentStatus } from "@/lib/types";
 
@@ -28,6 +29,47 @@ export function StatusPill({ status }: { status: AgentStatus }) {
         {s.label}
       </span>
     </span>
+  );
+}
+
+/**
+ * Refresh, and the timestamp that makes it mean something.
+ *
+ * The screens poll now, so the honest question a bare "Refresh" button leaves
+ * unanswered — *how old is what I am looking at?* — has to be on screen too.
+ * An absolute clock time rather than "3 minutes ago": it needs no ticking
+ * timer to stay true, and a stale-looking wall clock is easier to trust than a
+ * relative label that may itself have stopped updating.
+ */
+export function RefreshControl({
+  updatedAt,
+  busy,
+  onRefresh,
+}: {
+  updatedAt: Date | null;
+  busy?: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      {updatedAt && (
+        <span className="hidden font-mono text-xs text-muted tnum sm:inline">
+          Updated{" "}
+          {updatedAt.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </span>
+      )}
+      <button
+        onClick={onRefresh}
+        className="flex items-center gap-1.5 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-muted hover:text-text"
+      >
+        <RefreshCw className={cn("size-3.5", busy && "animate-spin")} aria-hidden />
+        Refresh
+      </button>
+    </div>
   );
 }
 

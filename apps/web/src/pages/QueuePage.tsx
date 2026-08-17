@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { Card } from "@/components/primitives";
+import { Card, RefreshControl } from "@/components/primitives";
 import {
   acknowledgeEscalation,
   listEscalations,
@@ -62,7 +62,14 @@ const FILTERS: Array<{ label: string; value: EscalationStatus | undefined }> = [
 export function QueuePage({ onOpenTask }: { onOpenTask: (taskId: string) => void }) {
   const { can } = useAuth();
   const [status, setStatus] = useState<EscalationStatus | undefined>("open");
-  const { data, error, loading, reload } = useApi(() => listEscalations(status), [status]);
+  // Slower than the inbox: a queue two people are working needs to notice
+  // somebody else claiming a row, but escalations arrive in minutes, not
+  // seconds.
+  const { data, error, loading, updatedAt, reload } = useApi(
+    () => listEscalations(status),
+    [status],
+    { pollMs: 20_000 },
+  );
   const entries = data ?? [];
 
   // Coordinator and above. A viewer still sees the backlog — hiding it from
@@ -78,12 +85,7 @@ export function QueuePage({ onOpenTask }: { onOpenTask: (taskId: string) => void
             Work the agents handed back. Click a row to replay what it did before giving up.
           </p>
         </div>
-        <button
-          onClick={reload}
-          className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-muted hover:text-text"
-        >
-          Refresh
-        </button>
+        <RefreshControl updatedAt={updatedAt} busy={loading} onRefresh={reload} />
       </div>
 
       <div className="flex flex-wrap gap-2">

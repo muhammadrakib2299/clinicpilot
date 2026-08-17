@@ -247,6 +247,26 @@ describe("app shell", () => {
     expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
   });
 
+  it("refetches when the tab comes back to the foreground", async () => {
+    // The dashboard calls itself "live status". It used to change only when
+    // you pressed Refresh.
+    const fetchMock = mockFetch({ ...BASE_HANDLERS });
+    vi.stubGlobal("fetch", fetchMock);
+    await renderSignedIn();
+
+    const overviewCalls = () =>
+      (fetchMock.mock.calls as unknown as [string, RequestInit?][]).filter(([url]) =>
+        url.includes("/api/overview"),
+      ).length;
+
+    const before = overviewCalls();
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    expect(overviewCalls()).toBeGreaterThan(before);
+  });
+
   it("sends the session token on every request", async () => {
     const fetchMock = mockFetch({ ...BASE_HANDLERS });
     vi.stubGlobal("fetch", fetchMock);

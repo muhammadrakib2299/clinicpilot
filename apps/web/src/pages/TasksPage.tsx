@@ -1,4 +1,4 @@
-import { Card } from "@/components/primitives";
+import { Card, RefreshControl } from "@/components/primitives";
 import { listTasks, type Task } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { cn } from "@/lib/cn";
@@ -12,7 +12,8 @@ const STATUS_STYLE: Record<Task["status"], string> = {
 };
 
 export function TasksPage({ onOpenTask }: { onOpenTask: (taskId: string) => void }) {
-  const { data, error, loading, reload } = useApi(listTasks, []);
+  // The inbox is where you watch a queued task become a running one.
+  const { data, error, loading, updatedAt, reload } = useApi(listTasks, [], { pollMs: 10_000 });
   const tasks = data ?? [];
 
   return (
@@ -24,12 +25,7 @@ export function TasksPage({ onOpenTask }: { onOpenTask: (taskId: string) => void
             Every task submitted to the fleet. Click one to replay its trace.
           </p>
         </div>
-        <button
-          onClick={reload}
-          className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-muted hover:text-text"
-        >
-          Refresh
-        </button>
+        <RefreshControl updatedAt={updatedAt} busy={loading} onRefresh={reload} />
       </div>
 
       {error && (

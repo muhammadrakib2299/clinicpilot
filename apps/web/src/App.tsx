@@ -69,7 +69,12 @@ function Shell() {
   // The badge is loaded here rather than in the Sidebar so acting on the queue
   // can refresh it — a count that stays at 4 after you clear it is worse than
   // no count at all.
-  const { data: queued, reload: reloadQueue } = useApi(countEscalations, []);
+  // Polled, because this is the closest thing the app has to a notification:
+  // an escalation raised by a run nobody is watching should reach the sidebar
+  // without the user reloading the page to find out.
+  const { data: queued, reload: reloadQueue } = useApi(countEscalations, [], {
+    pollMs: 30_000,
+  });
 
   // Escape closes the drawer. Without it the only way out on a phone is to hit
   // the exact 36px button it is sitting under.

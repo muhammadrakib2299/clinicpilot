@@ -1,6 +1,6 @@
 import { AlertTriangle, Pause, Settings2, TrendingUp } from "lucide-react";
 
-import { Card, Meter, OutcomeBar, StatusPill } from "@/components/primitives";
+import { Card, Meter, OutcomeBar, RefreshControl, StatusPill } from "@/components/primitives";
 import { TaskComposer } from "@/components/TaskComposer";
 import { getOverview, listAgents, type AgentSummary, type OverviewKpis } from "@/lib/api";
 import { TRACE_COLORS } from "@/lib/trace";
@@ -126,8 +126,10 @@ export function DashboardPage({
 }: {
   onOpenTask: (taskId: string) => void;
 }) {
-  const overview = useApi(getOverview, []);
-  const agents = useApi(listAgents, []);
+  // A task takes seconds, so ten is short enough that a run finishing while you
+  // watch moves the tiles, and long enough that an idle dashboard is cheap.
+  const overview = useApi(getOverview, [], { pollMs: 10_000 });
+  const agents = useApi(listAgents, [], { pollMs: 10_000 });
 
   const reloadAll = () => {
     overview.reload();
@@ -143,12 +145,11 @@ export function DashboardPage({
           <h1 className="text-lg font-semibold tracking-tight">Fleet Overview</h1>
           <p className="text-sm text-muted">Live status across your deployed AI agents.</p>
         </div>
-        <button
-          onClick={reloadAll}
-          className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-muted hover:text-text"
-        >
-          Refresh
-        </button>
+        <RefreshControl
+          updatedAt={overview.updatedAt}
+          busy={overview.loading || agents.loading}
+          onRefresh={reloadAll}
+        />
       </div>
 
       {error && (
