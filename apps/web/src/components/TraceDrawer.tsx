@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { Cpu, Eye, ShieldCheck, TriangleAlert, Wrench, X, Zap } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Cpu, Eye, Link2, ShieldCheck, TriangleAlert, Wrench, X, Zap } from "lucide-react";
 
 import type { TraceKind } from "@/lib/types";
 import { TRACE_COLORS } from "@/lib/trace";
@@ -35,6 +35,7 @@ const FOCUSABLE =
 export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
   const { steps, status, outcome, connection, totalCostUsd } = useTraceStream(taskId);
   const panel = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
 
   // Read through a ref rather than depending on it. `onClose` is an inline
   // arrow in the shell, so a new identity every render — as a dependency it
@@ -90,9 +91,27 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
     };
   }, [taskId]);
 
+  // Reset per trace, so opening a second one does not inherit the first's tick.
+  useEffect(() => setCopied(false), [taskId]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
   if (!taskId) return null;
 
   const done = TERMINAL.has(status);
+
+  const copyLink = () => {
+    // Absent outside a secure context, which includes the http://localhost:5173
+    // some people will run this on. Failing quietly beats an unhandled reject.
+    void navigator.clipboard?.writeText(window.location.href).then(
+      () => setCopied(true),
+      () => undefined,
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -130,13 +149,29 @@ export function TraceDrawer({ taskId, onClose }: { taskId: string | null; onClos
             </div>
             <div className="mt-0.5 truncate font-mono text-xs text-muted">{taskId}</div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close trace"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-muted hover:text-text"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* The trace is addressable now, so it is worth being able to hand
+                the address to somebody. */}
+            <button
+              onClick={copyLink}
+              aria-label="Copy link to this trace"
+              title={copied ? "Copied" : "Copy link to this trace"}
+              className="flex size-8 items-center justify-center rounded-md border border-border bg-surface-2 text-muted hover:text-text"
+            >
+              {copied ? (
+                <Check className="size-4 text-success" />
+              ) : (
+                <Link2 className="size-4" />
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Close trace"
+              className="flex size-8 items-center justify-center rounded-md border border-border bg-surface-2 text-muted hover:text-text"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
 
         {/* The steps arrive one at a time over a socket. Without a live region

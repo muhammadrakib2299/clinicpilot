@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { BrowserRouter, Route, Routes, useSearchParams } from "react-router-dom";
 
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
@@ -63,8 +63,39 @@ const PLACEHOLDERS = [
 
 function Shell() {
   const { theme, toggle: toggleTheme } = useTheme();
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+
+  /**
+   * Which trace is open lives in the URL, not in component state.
+   *
+   * It was `useState`, which made the single most demo-able thing in the
+   * product unlinkable: you could not send a colleague the run where the agent
+   * escalated, bookmark the one you were mid-way through reading, or reload
+   * the page without losing it. A trace is a record of something that
+   * happened — records get addresses.
+   *
+   * A search param rather than a `/tasks/:id` route because the drawer overlays
+   * whichever screen you were on, and that context is worth keeping in the
+   * link. Opening pushes a history entry and closing replaces it, so Back
+   * lands on the page as it was before the drawer rather than reopening it.
+   */
+  const [params, setParams] = useSearchParams();
+  const openTaskId = params.get("trace");
+
+  const setOpenTaskId = useCallback(
+    (taskId: string | null) => {
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (taskId) next.set("trace", taskId);
+          else next.delete("trace");
+          return next;
+        },
+        { replace: !taskId },
+      );
+    },
+    [setParams],
+  );
 
   // The badge is loaded here rather than in the Sidebar so acting on the queue
   // can refresh it — a count that stays at 4 after you clear it is worse than

@@ -499,6 +499,25 @@ describe("trace drawer", () => {
     expect(document.activeElement).toBe(send);
   });
 
+  it("opens straight from a link, and clears the URL when closed", async () => {
+    // A trace is a record of something that happened. Records get addresses —
+    // this used to be component state, so it could not be shared or reloaded.
+    window.history.replaceState(null, "", `/?trace=${TASK.id}`);
+    vi.stubGlobal(
+      "fetch",
+      mockFetch({ ...BASE_HANDLERS, [`/api/tasks/${TASK.id}`]: { task: TASK, steps: [step()] } }),
+    );
+    await renderSignedIn();
+
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    expect(screen.getByText(TASK.id)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Close trace"));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(window.location.search).toBe("");
+  });
+
   it("closes the socket when the drawer closes", async () => {
     vi.stubGlobal(
       "fetch",
