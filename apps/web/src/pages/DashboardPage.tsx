@@ -1,4 +1,5 @@
 import { AlertTriangle, Pause, Settings2, TrendingUp } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import {
   Card,
@@ -74,7 +75,7 @@ function Metric({ label, value, color }: { label: string; value: string; color?:
   );
 }
 
-function AgentCard({ agent, onOpenTrace }: { agent: AgentSummary; onOpenTrace: () => void }) {
+function AgentCard({ agent }: { agent: AgentSummary }) {
   const hasRun = agent.totalTasks > 0;
 
   return (
@@ -102,13 +103,25 @@ function AgentCard({ agent, onOpenTrace }: { agent: AgentSummary; onOpenTrace: (
       </div>
 
       <div className="mt-4 flex gap-2">
-        <button
-          onClick={onOpenTrace}
-          disabled={!hasRun}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] hover:opacity-90 disabled:opacity-40"
+        {/*
+         * A link to the inbox filtered to this agent, not a button that
+         * downloaded every task in the tenant to guess which one to open. The
+         * old version silently did nothing when the guess found no match, and
+         * opened an arbitrary run when it did.
+         */}
+        <Link
+          to={hasRun ? `/tasks?agent=${agent.id}` : "/tasks"}
+          aria-disabled={!hasRun}
+          onClick={(event) => {
+            if (!hasRun) event.preventDefault();
+          }}
+          className={cn(
+            "flex flex-1 items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-[var(--accent-fg)] hover:opacity-90",
+            !hasRun && "pointer-events-none opacity-40",
+          )}
         >
-          <TrendingUp className="size-3.5" /> View traces
-        </button>
+          <TrendingUp className="size-3.5" aria-hidden /> View traces
+        </Link>
         <button
           disabled
           title="Not built yet"
@@ -185,18 +198,7 @@ export function DashboardPage({
           <h2 className="text-sm font-semibold text-muted">Agents</h2>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {(agents.data ?? []).map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onOpenTrace={() => {
-                  void import("@/lib/api").then(({ listTasks }) =>
-                    listTasks().then((tasks) => {
-                      const match = tasks.find((task) => task.agentId === agent.id);
-                      if (match) onOpenTask(match.id);
-                    }),
-                  );
-                }}
-              />
+              <AgentCard key={agent.id} agent={agent} />
             ))}
             {agents.loading &&
               [0, 1, 2].map((i) => (

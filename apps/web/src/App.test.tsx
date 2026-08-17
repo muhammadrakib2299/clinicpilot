@@ -557,6 +557,54 @@ describe("task inbox", () => {
   });
 });
 
+describe("task filters", () => {
+  const OTHER = {
+    ...TASK,
+    id: "22222222-3333-4444-8555-666666666666",
+    agentId: "agent-2",
+    status: "resolved",
+    input: "Can you send me my discharge notes?",
+  };
+
+  async function openInbox() {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, "/api/tasks": [TASK, OTHER] }));
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /Tasks/ }));
+    await waitFor(() => expect(screen.getByRole("button", { name: TASK.input })).toBeInTheDocument());
+  }
+
+  it("narrows by status", async () => {
+    await openInbox();
+
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "resolved" } });
+
+    expect(screen.getByRole("button", { name: OTHER.input })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: TASK.input })).not.toBeInTheDocument();
+  });
+
+  it("narrows by free text across the message and the outcome", async () => {
+    await openInbox();
+
+    fireEvent.change(screen.getByLabelText("Search messages and outcomes"), {
+      target: { value: "discharge" },
+    });
+
+    expect(screen.getByRole("button", { name: OTHER.input })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: TASK.input })).not.toBeInTheDocument();
+  });
+
+  it("takes its status and agent from the URL, so a filtered inbox is linkable", async () => {
+    window.history.replaceState(null, "", "/tasks?agent=agent-2");
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, "/api/tasks": [TASK, OTHER] }));
+    await renderSignedIn();
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: OTHER.input })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: TASK.input })).not.toBeInTheDocument();
+  });
+});
+
 describe("the human queue", () => {
   /** Signs in, then navigates to the queue via the nav link. */
   async function openQueue(handlers: Record<string, unknown>) {
