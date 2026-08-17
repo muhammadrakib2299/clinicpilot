@@ -17,7 +17,7 @@ export function NotBuiltPage({
   description: string;
 }) {
   return (
-    <div className="mx-auto max-w-[1440px] p-6">
+    <div className="mx-auto max-w-[1440px] p-4 sm:p-6">
       <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
 
       <Card className="mt-6 flex max-w-2xl items-start gap-4 p-6">

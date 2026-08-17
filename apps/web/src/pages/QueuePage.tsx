@@ -70,7 +70,7 @@ export function QueuePage({ onOpenTask }: { onOpenTask: (taskId: string) => void
   const canAct = can("coordinator");
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6 p-6">
+    <div className="mx-auto max-w-[1440px] space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Human queue</h1>

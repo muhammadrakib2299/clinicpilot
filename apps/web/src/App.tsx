@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { Sidebar } from "@/components/Sidebar";
@@ -64,11 +64,23 @@ const PLACEHOLDERS = [
 function Shell() {
   const { theme, toggle: toggleTheme } = useTheme();
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   // The badge is loaded here rather than in the Sidebar so acting on the queue
   // can refresh it — a count that stays at 4 after you clear it is worse than
   // no count at all.
   const { data: queued, reload: reloadQueue } = useApi(countEscalations, []);
+
+  // Escape closes the drawer. Without it the only way out on a phone is to hit
+  // the exact 36px button it is sitting under.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNavOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [navOpen]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-text">
@@ -80,9 +92,28 @@ function Shell() {
         Skip to main content
       </a>
 
-      <Sidebar openEscalations={queued?.open ?? 0} />
+      {/* Only ever visible under the drawer — `lg:hidden` because from `lg` up
+          the sidebar is in normal flow and there is nothing to dim. */}
+      {navOpen && (
+        <div
+          onClick={() => setNavOpen(false)}
+          aria-hidden
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+        />
+      )}
+
+      <Sidebar
+        openEscalations={queued?.open ?? 0}
+        open={navOpen}
+        onNavigate={() => setNavOpen(false)}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar theme={theme} onToggleTheme={toggleTheme} />
+        <Topbar
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          navOpen={navOpen}
+          onToggleNav={() => setNavOpen((value) => !value)}
+        />
         <main id="main" tabIndex={-1} className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<DashboardPage onOpenTask={setOpenTaskId} />} />

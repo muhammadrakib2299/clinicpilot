@@ -51,24 +51,54 @@ const INITIALS = (name: string) =>
     .map((part) => part[0]!.toUpperCase())
     .join("");
 
-export function Sidebar({ openEscalations }: { openEscalations?: number }) {
+/**
+ * One sidebar, two layouts.
+ *
+ * Not two components and not two renders — a second copy for mobile would put
+ * every nav link in the document twice, which doubles them for a screen reader
+ * as surely as it does for `getByRole`.
+ *
+ * Closed-on-mobile is `invisible`, not just translated off-screen. An element
+ * pushed out of the viewport with `translate` is still focusable and still in
+ * the accessibility tree, so tabbing from the page content would walk into a
+ * menu nobody can see. `visibility: hidden` removes it from both, and unlike
+ * `display: none` it still animates.
+ */
+export function Sidebar({
+  openEscalations,
+  open = false,
+  onNavigate,
+}: {
+  openEscalations?: number;
+  open?: boolean;
+  onNavigate?: () => void;
+}) {
   const { user, can } = useAuth();
   const visible = NAV.filter((item) => !item.minRole || can(item.minRole));
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface-1">
-      <div className="flex h-14 items-center gap-2 border-b border-border px-4">
+    <aside
+      id="sidebar"
+      className={cn(
+        "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface-1",
+        "transition-[transform,visibility] duration-200 ease-out",
+        "lg:static lg:z-auto lg:w-60 lg:shrink-0 lg:visible lg:translate-x-0",
+        open ? "visible translate-x-0" : "invisible -translate-x-full",
+      )}
+    >
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
         <div className="flex size-7 items-center justify-center rounded-md border border-border-strong bg-surface-2">
           <Activity className="size-4 text-accent" strokeWidth={2.5} />
         </div>
         <span className="text-sm font-semibold tracking-tight">ClinicPilot</span>
       </div>
 
-      <nav className="flex-1 space-y-0.5 p-2">
+      <nav aria-label="Primary" className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {visible.map((item) => (
           <NavLink
             key={item.label}
             to={item.to}
             end={item.to === "/"}
+            onClick={onNavigate}
             className={({ isActive }) =>
               cn(
                 "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
@@ -92,7 +122,7 @@ export function Sidebar({ openEscalations }: { openEscalations?: number }) {
         ))}
       </nav>
 
-      <div className="border-t border-border p-3">
+      <div className="shrink-0 border-t border-border p-3">
         <div className="flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-2">
           <div className="flex size-7 items-center justify-center rounded-full border border-border-strong bg-surface-1 text-xs font-semibold">
             {user ? INITIALS(user.name) : "?"}

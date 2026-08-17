@@ -218,6 +218,35 @@ describe("app shell", () => {
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
   });
 
+  it("opens the nav drawer, and closes it on Escape", async () => {
+    // Below `lg` the sidebar is a drawer. Without a way to dismiss it the only
+    // exit on a phone is the 36px button it is sitting under.
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS }));
+    await renderSignedIn();
+
+    const open = screen.getByRole("button", { name: "Open navigation" });
+    expect(open).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(open);
+    expect(screen.getByRole("button", { name: "Close navigation" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+  });
+
+  it("closes the nav drawer after following a link", async () => {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, "/api/escalations": [] }));
+    await renderSignedIn();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    fireEvent.click(screen.getByRole("link", { name: /human queue/i }));
+
+    expect(screen.getByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+  });
+
   it("sends the session token on every request", async () => {
     const fetchMock = mockFetch({ ...BASE_HANDLERS });
     vi.stubGlobal("fetch", fetchMock);

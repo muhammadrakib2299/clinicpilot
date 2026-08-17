@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Building2, Check, ChevronDown, LogOut, Moon, Sun } from "lucide-react";
+import { Building2, Check, ChevronDown, LogOut, Menu, Moon, Sun, X } from "lucide-react";
 
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -50,16 +50,18 @@ function TenantSwitcher() {
         aria-expanded={only ? undefined : open}
         title={only ? "You belong to one organisation" : "Switch organisation"}
         className={cn(
-          "flex items-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm font-medium",
+          "flex min-w-0 items-center gap-2 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-sm font-medium sm:px-3",
           !only && "hover:border-border-strong",
         )}
       >
-        <span className="size-2 rounded-sm bg-accent" />
-        {active?.tenantName ?? "—"}
-        <span className="rounded border border-border bg-surface-1 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+        <span className="size-2 shrink-0 rounded-sm bg-accent" />
+        <span className="truncate">{active?.tenantName ?? "—"}</span>
+        {/* The role is the least useful thing here on a narrow screen, and the
+            sidebar shows it too. */}
+        <span className="hidden shrink-0 rounded border border-border bg-surface-1 px-1.5 py-0.5 text-xs uppercase tracking-wide text-muted sm:inline">
           {user.role}
         </span>
-        {!only && <ChevronDown className="size-3.5 text-muted" />}
+        {!only && <ChevronDown className="size-3.5 shrink-0 text-muted" />}
       </button>
 
       {open && (
@@ -86,9 +88,7 @@ function TenantSwitcher() {
             >
               <Building2 className="size-3.5 shrink-0 text-muted" />
               <span className="min-w-0 flex-1 truncate">{membership.tenantName}</span>
-              <span className="text-[10px] uppercase tracking-wide text-muted">
-                {membership.role}
-              </span>
+              <span className="text-xs uppercase tracking-wide text-muted">{membership.role}</span>
               {membership.tenantId === user.tenantId && (
                 <Check className="size-3.5 shrink-0 text-accent" />
               )}
@@ -103,17 +103,33 @@ function TenantSwitcher() {
 export function Topbar({
   theme,
   onToggleTheme,
+  navOpen,
+  onToggleNav,
 }: {
   theme: "dark" | "light";
   onToggleTheme: () => void;
+  navOpen: boolean;
+  onToggleNav: () => void;
 }) {
   const { user, signOut } = useAuth();
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface-1 px-4">
-      <TenantSwitcher />
+    <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-surface-1 px-3 sm:px-4">
+      <div className="flex min-w-0 items-center gap-2">
+        {/* Below `lg` the sidebar is a drawer, so it needs a way in. */}
+        <button
+          onClick={onToggleNav}
+          aria-label={navOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={navOpen}
+          aria-controls="sidebar"
+          className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-muted hover:text-text lg:hidden"
+        >
+          {navOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+        </button>
+        <TenantSwitcher />
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {/* The search box and notification bell that used to sit here were
             chrome with nothing behind them. Removed rather than left looking
             clickable — the placeholder pages exist for features that are

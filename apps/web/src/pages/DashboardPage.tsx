@@ -134,8 +134,8 @@ export function DashboardPage({
   const error = overview.error ?? agents.error;
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-[1440px] space-y-6 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Fleet Overview</h1>
           <p className="text-sm text-muted">Live status across your deployed AI agents.</p>
@@ -188,7 +188,7 @@ export function DashboardPage({
           />
 
           <Card className="p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-sm font-semibold">Plan usage</h2>
               <span className="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
                 Clinic

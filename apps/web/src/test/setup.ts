@@ -11,4 +11,9 @@ afterEach(() => {
   // file — so a test that toggles it would otherwise decide the starting theme
   // for every test after it.
   window.localStorage.clear();
+  // Same problem, one layer down: `BrowserRouter` reads jsdom's single shared
+  // history, so a test that clicks a nav link leaves every later test starting
+  // on that route. It only looked fine because the tests that navigate happen
+  // to sit last in the file.
+  window.history.replaceState(null, "", "/");
 });
