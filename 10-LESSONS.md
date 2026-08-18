@@ -891,14 +891,42 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
   verified against the live HAPI server that a stale version is rejected with a
   409 rather than silently overwriting someone else's booking."*
 
-#### 2026-__-__ — 
-- Phase: 
-- Context: 
-- Problem: 
-- What I tried: 
-- What worked: 
-- What I'd do differently: 
-- Interview soundbite: 
+#### 2026-08-18 — A tested endpoint with no caller looks exactly like a feature
+- Phase: 4
+- Context: Building the Knowledge Base and Patient Messages screens — the two
+  gaps the 2026-08-17 frontend audit found.
+- **Problem:** `GET /api/documents` and `GET /api/messages` had been shipped,
+  role-reasoned, RLS-scoped and covered by 25 integration tests since Phase 3,
+  and **neither had a single line of UI**. Not a placeholder nav item, not a
+  client function — nothing. The entire output of one of the three agents was
+  invisible inside the product it belongs to.
+- **Why nothing caught it.** Every signal the repo produces said those features
+  were done. The API tests passed. The endpoints returned correct data. The
+  phase checklist had them ticked, truthfully, because the *backend* item was
+  what the checklist described. There is no test that fails when a working
+  endpoint has no caller, and no lint rule for "this is unreachable by a
+  human". The audit found it by walking the nav, which is the only method that
+  works: **use the product, not the checklist.**
+- **What I'd change about the checklist:** a deliverable phrased as "documents
+  API" is done when the API works. Phrased as "a clinic can see its corpus" it
+  is not done until something renders it. The second phrasing costs nothing and
+  would have caught this at the time.
+- What worked: the browser check. `pnpm test` is 553 green tests and none of
+  them could tell me the light theme reads correctly, that the summary tiles
+  and the table rows do not collide, or that a delivered status never appears
+  without its channel *on screen*. Ten minutes with a stubbed gateway and a
+  real browser confirmed all three — the same lesson as the WebSocket backfill
+  bug the day before, arriving from a different direction.
+- **Design call worth keeping:** the "no patient received any of these" notice
+  on the messages screen is **computed from `delivery_channel`**, not written
+  into the page. A hardcoded disclaimer is correct exactly once and then rots
+  silently the day a real carrier is wired in; a derived one retires itself.
+  The same instinct as the KPI tiles that report only what the system measures.
+- Interview soundbite: *"An audit found two REST endpoints that had been
+  shipped, tested and serving for a week with no UI at all — one of them the
+  entire output of an agent. Nothing failed, because there is no test for 'this
+  works and no human can reach it'. I now phrase deliverables as what a user
+  can do, not as what the API returns."*
 
 #### 2026-__-__ — 
 - Phase: 
@@ -936,6 +964,7 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-08-17 | Which trace is open is component state | **It is a URL** (`?trace=<taskId>`) | A trace is a record of something that happened; records get addresses. As state it could not be shared, bookmarked or reloaded, and a walkthrough had to say "click the third row" instead of pasting a link |
 | 2026-08-17 | Backfill the trace *after* subscribing, so no step written during the handshake is lost (decided 2026-07-29) | **Backfill immediately *and* on open** | The original reasoning was right and the placement was wrong. Gating HTTP behind the socket made the stream a precondition for reading a finished run — a blocked WebSocket showed an empty drawer for a trace that was fully available. Merging by `stepNo` means doing both costs nothing and keeps the original guarantee |
 | 2026-08-17 | Status colours are defined once and the light theme overrides what it needs | **Every semantic token is redefined per theme, or it is a bug** | Four were omitted and inherited dark-tuned values onto white at 2.2–2.5:1. A partial override is indistinguishable from a complete one until someone opens the other theme and measures |
+| 2026-08-18 | The messages screen would carry a fixed "deliveries are simulated" disclaimer | **Derive the notice from `delivery_channel`** | A hardcoded disclaimer is true exactly once. `simulated` is already a real value in the row — reading it means the notice disappears by itself the day a real carrier is wired in, instead of waiting for someone to remember it is there |
 
 ---
 
@@ -943,11 +972,24 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 Fill these in by launch — concrete numbers make the portfolio post land.
 
 - [~] **Lines of code / services / test coverage %** — 6 services (web, api, ai,
-  postgres, redis, n8n) across 5 workspaces. The web suite is **40 tests**
-  (counted 2026-08-17, up from 28). The repo total previously recorded here was
-  628, but its own breakdown — 231 + 74 + 299 — sums to 604, so **the total needs
-  a recount across all five workspaces rather than another adjustment by
-  arithmetic**; that is precisely the mistake this line has already made twice.
+  postgres, redis, n8n) across 5 workspaces. **Recounted 2026-08-18 by running
+  every suite** rather than adjusting the previous figure by arithmetic:
+
+  | Workspace | Tests |
+  |---|---|
+  | `apps/ai` (pytest) | 299 |
+  | `apps/api` (jest: unit + e2e) | 129 |
+  | `packages/shared-types` | 47 |
+  | `apps/web` | 51 |
+  | `packages/fhir-client` | 27 |
+  | **`pnpm test` total** | **553** |
+  | DB-backed integration, run separately in CI compose (documents 13, escalations 16, messages 12, RLS 13) | 54 |
+  | **Written in total** | **607** |
+
+  The number carried here before was **628**, with a breakdown summing to 604 —
+  both wrong, in different directions. Two figures are quoted from now on
+  because they answer different questions: what `pnpm test` runs on a laptop,
+  and what exists including the suites that need a live database.
   Coverage % still not measured — wire `test:cov` thresholds in Phase 6.
 - [~] **Avg cost per resolved task** — **$0.0153** for a full reschedule on
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost

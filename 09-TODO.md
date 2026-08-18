@@ -321,16 +321,27 @@ the first time that has been true.
 - [ ] ✅ Gate (B2/B5): MVP complete; metrics + cost visible; UI shipped-grade
 
 ### Frontend gaps found in the 2026-08-17 audit, not yet closed
-- [ ] **Knowledge Base screen** — `GET /api/documents` ships and serves 6
-      documents / 43 passages per clinic. **There is no UI for it at all**, so
-      "what can the Document Q&A agent actually answer from" is still only
-      answerable by reading the seed script. Pure frontend work
-- [ ] **Patient Messages screen** — `GET /api/messages` ships with
-      `delivery_channel` and status per row. **The entire output of the
-      Follow-up Agent is invisible in the product.** Pure frontend work
+- [x] ~~**Knowledge Base screen**~~ — built 2026-08-18. Lists the corpus with
+      the count that actually matters: **passages**, not documents. Retrieval
+      searches chunks and a citation points at one, so a document with zero
+      chunks is invisible to the agent however good its contents are — that row
+      is flagged "not retrievable" rather than rendered as a quiet zero. The
+      embedder is named on screen (`hashing-v1-1024`) with what it costs:
+      matching is lexical, so a question phrased in different words to the
+      document may miss. That belonged next to the corpus, not only in ADR-009
+- [x] ~~**Patient Messages screen**~~ — built 2026-08-18. The Follow-up
+      Agent's output is in the product for the first time. Two things the
+      screen refuses to round off: a delivered status is **never** rendered
+      without the channel that took it, because `sent` is a claim about this
+      system and not about a patient's phone; and every row names the approved
+      template it filled, which is the only place the "the agent cannot write
+      in its own words" guarantee is visible to a user. The stand-in notice is
+      **derived from `delivery_channel`**, not hardcoded — wire a real carrier
+      in and it retires itself
 - [ ] Agents detail screen — `/api/agents` already returns per-agent stats; the
       nav item is still a placeholder and Configure/Pause render disabled
-- [ ] Pagination — `listTasks()` and `listAudit()` fetch everything, every time
+- [ ] Pagination — `listTasks()` and `listAudit()` fetch everything, every
+      time, and `listMessages()` now joins them with a hardcoded limit of 200
 - [ ] Toasts / optimistic updates — every action is a full reload
 - [ ] Replace `useApi` with TanStack Query once a screen needs real cache
       invalidation (still not that screen)
