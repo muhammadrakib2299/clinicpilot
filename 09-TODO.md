@@ -277,12 +277,33 @@ the first time that has been true.
       retry it, which is ADR-003's rule that 4xx never fails over)
 
 ## Phase 4 — Analytics, Observability & Polish ⭐ **started early: the UI foundation pass landed 2026-08-17**
-- [ ] Analytics: tasks/day, success vs escalation per agent (Recharts) — needs a
-      `GET /api/analytics`; `traces` and `llm_usage` already hold everything
-- [ ] Cost analytics: $/resolved task, per agent/tenant, spend charts
-- [ ] KPI tiles: no-show delta, calls deflected, follow-ups completed
+- [x] ~~Analytics: tasks/day, success vs escalation per agent~~ — built
+      2026-08-18. `GET /api/analytics?days=` serves the whole screen in one
+      round trip, because five endpoints would let the tiles and the charts
+      drift onto different windows the moment one refetched alone. Every day in
+      the window is returned including the empty ones: grouping by date only
+      returns days that *have* rows, and a series built from that draws three
+      scattered tasks as three adjacent bars
+- [x] ~~Cost analytics: $/resolved task, per agent/tenant, spend charts~~ —
+      spend per day, per agent, and **per model**, which is where ADR-003
+      becomes visible: a second model in that table means the fallback fired
+- [~] KPI tiles: no-show delta, calls deflected, follow-ups completed — **one
+      of the three, and the screen says so.** Follow-ups delivered is real and
+      is on the page. Nothing in this system records appointment attendance or
+      inbound calls, so the other two have no measurement behind them; they
+      were invented figures on the Phase-0 mock and were removed for it. The
+      absence is stated on screen rather than quietly dropped
+- [ ] **Recharts is not installed, and the stack docs still name it.** Measured
+      before it was turned down: importing it took the bundle from **80.4 KB to
+      193.2 KB gzipped, +112.8 KB for two column charts**. The charts are ~200
+      lines of HTML instead. `04-UI-UX` and `05-TECH-STACK` need updating, or
+      the decision needs revisiting
 - [ ] OpenTelemetry tracing api→ai→n8n→fhir
-- [ ] Prometheus/Grafana: p50/p95 latency, queue depth, error/cost rate
+- [~] Prometheus/Grafana: p50/p95 latency, queue depth, error/cost rate — p50
+      and p95 are computed and on the Analytics screen (`percentile_cont` over
+      enqueue-to-final-status, so wall clock including queue wait and model
+      time, and it is labelled as that). Queue depth and a metrics exporter are
+      still open
 - [ ] Eval harness: datasets + scoring; commit a results report
 - [ ] FHIR Explorer: patient/appt browser + raw resource JSON viewer
 - [x] Design-system pass; dark mode; `prefers-reduced-motion` — **done
@@ -338,6 +359,11 @@ the first time that has been true.
       in its own words" guarantee is visible to a user. The stand-in notice is
       **derived from `delivery_channel`**, not hardcoded — wire a real carrier
       in and it retires itself
+- [ ] **A flaky test.** `defaults to the dark theme and toggles it on <html>`
+      failed once inside a full `turbo run test`, then passed 8 consecutive
+      runs (4 standalone, 4 forced under turbo). Not reproduced since and not
+      diagnosed. Recorded rather than dismissed: a test that fails 1 in 9 is a
+      CI failure waiting for the worst possible moment
 - [ ] Agents detail screen — `/api/agents` already returns per-agent stats; the
       nav item is still a placeholder and Configure/Pause render disabled
 - [ ] Pagination — `listTasks()` and `listAudit()` fetch everything, every

@@ -3,8 +3,8 @@
 > **One-line pitch:** ClinicPilot is a multi-tenant SaaS control plane that lets healthcare clinics deploy, orchestrate, and monitor a fleet of AI agents (scheduling, patient follow-up, document Q&A) built on n8n workflows and the Claude API — with FHIR/EHR integration, role-based access, and a HIPAA-minded audit trail baked in.
 
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
-![status](https://img.shields.io/badge/status-Phase_3_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-628_passing-brightgreen)
+![status](https://img.shields.io/badge/status-Phase_4_in_progress-blue)
+![tests](https://img.shields.io/badge/tests-629_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -219,8 +219,8 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 ### Verify everything
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 231 tests, 5 workspaces
-pnpm test:integration                                    # 74, needs a live database
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 276 tests, 5 workspaces
+pnpm test:integration                                    # 54, needs a live database
 cd apps/ai && pytest && ruff check .                     # 299 tests
 ```
 
@@ -310,6 +310,9 @@ real pgvector database, and the model call was not.
 | **Retrieval that can say no** | Nearest-neighbour search always returns neighbours, so a score floor drops passages sharing no vocabulary with the question. "The documents do not cover this" is a first-class answer rather than a failure |
 | **A human queue** | Every escalation lands in a queue somebody works — claim it, close it with a note. The row is written by the *gateway*, in the same transaction that marks the task escalated, so no agent path can escalate without queueing |
 | **A scheduled n8n workflow** | Sweeps drafted follow-ups every five minutes and delivers them. It enumerates clinics first and makes one RLS-scoped pass each, because a cron has no session and therefore no tenant ([`workflows/`](./workflows/README.md)) |
+| **Knowledge Base screen** | What the Document Q&A agent can cite, counted in **passages** rather than documents — retrieval searches chunks, so a document that ingested with none is invisible to the agent and says so |
+| **Patient Messages screen** | Everything the Follow-up Agent drafted, and what became of it. A delivered status is never shown without the channel that took it, because `sent` is a claim about this system and not about a patient's phone |
+| **Analytics** | Tasks per day by outcome, spend per day, per-agent and **per-model** breakdowns, and p50/p95 task latency. Every day in the window is drawn including the empty ones, and every chart has a table view so no value is reachable by hover alone |
 
 ### Honest about the embedder
 
@@ -337,8 +340,8 @@ audited under a tenant Postgres enforces. What is left is breadth:
 a real delivery channel (the n8n workflow runs, but its carrier node is a
 stand-in — `messages.delivery_channel` records `simulated` so the row never
 implies a text somebody received) · an inbound n8n webhook so a clinic's own
-automations can create tasks · analytics and evals · Stripe and quotas ·
-deployment.
+automations can create tasks · an eval harness with a committed report ·
+OpenTelemetry and a metrics exporter · Stripe and quotas · deployment.
 
 Known sharp edges, all tracked in [`09-TODO.md`](./09-TODO.md) and
 [`SECURITY.md`](./SECURITY.md): the enqueue sits just outside the task's
@@ -363,8 +366,14 @@ See [`09-TODO.md`](./09-TODO.md) for the live checklist and
 **Queue:** BullMQ over Redis, worker in its own process
 **Infra:** Docker Compose, GitHub Actions CI (Node + Python + a compose smoke test)
 
-**Planned:** n8n workflows · OpenAI fallback behind the provider
-interface · Recharts analytics · TanStack Query · Vercel + Fly.io deployment.
+**Charts are hand-rolled HTML**, not Recharts, and the number is why: adding
+it took the production bundle from **80.4 KB to 193.2 KB gzipped — +112.8 KB for
+two column charts.** The same argument already declined socket.io (~40 KB) and
+TanStack Query (~13 KB). `05-TECH-STACK` still names Recharts and has not caught
+up with the measurement.
+
+**Planned:** an inbound n8n webhook · OpenAI fallback behind the provider
+interface · OpenTelemetry + Prometheus · Vercel + Fly.io deployment.
 
 Full rationale in [`05-TECH-STACK.md`](./05-TECH-STACK.md).
 

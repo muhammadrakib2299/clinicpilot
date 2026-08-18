@@ -928,14 +928,47 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
   works and no human can reach it'. I now phrase deliverables as what a user
   can do, not as what the API returns."*
 
-#### 2026-__-__ — 
-- Phase: 
-- Context: 
-- Problem: 
-- What I tried: 
-- What worked: 
-- What I'd do differently: 
-- Interview soundbite: 
+#### 2026-08-18 — The palette validator disagreed with me, and it was right
+- Phase: 4
+- Context: Building the Analytics screen — tasks/day, spend/day, per-agent and
+  per-model breakdowns, off a new `GET /api/analytics`.
+- **Problem:** the obvious chart is one stacked column per day, split
+  resolved / escalated / failed in the design system's own status colours.
+  Those tokens were *already* audited: the 2026-08-17 pass found the light
+  theme failing WCAG at 2.2–2.5:1 and fixed all four. I assumed audited meant
+  safe.
+- **What the validator said.** Run as a categorical palette, the three fail
+  adjacent-pair separation. Dark: resolved↔failed **ΔE 5.6** under
+  deuteranopia, below even the 6–8 band that is legal with secondary encoding.
+  Light is worse: danger↔warning **11.5 under normal vision**, against a floor
+  of 15 — two colours a *full-colour* reader struggles to separate.
+- **The insight worth keeping:** a colour can pass as text and fail as a series.
+  Contrast is a check against the *background*; separation is a check against
+  the *other series*. The 2026-08-17 pass did the first and I read it as
+  covering the second. They are unrelated tests and a token can pass one while
+  failing the other badly.
+- **What worked:** faceting into three single-series panels. Identity moves
+  from the colour to the panel title, there is no adjacent pair left to
+  confuse, and the semantic colours keep doing the job they are good at. The
+  light-theme screenshot then *showed* the problem plainly — escalated and
+  failed really are near-identical — while being harmless, because nothing asks
+  you to compare them.
+- **The browser found two more things forty tests could not.** The x-axis
+  labels shared the columns' flex grid, so each inherited a ~26px width and
+  `truncate` cut "Jul 20" to "J…" — in jsdom the text is present and correct
+  and only the rendered width is wrong. And measuring a hover target gave
+  11×104px, under the ~24px minimum, because three panels side by side each got
+  a third of the width. Both are geometry, and geometry is invisible to a test
+  that queries the DOM.
+- What I'd do differently: measure the library *before* designing around it.
+  Installing Recharts, building, and reading +112.8 KB gzipped took four
+  minutes and settled an argument the stack doc had been holding since Phase 0.
+- Interview soundbite: *"I nearly shipped a chart that red-green colourblind
+  users could not read, using colours I had audited for contrast the day
+  before. Contrast is a test against the background; colour separation is a
+  test against the other series — passing one says nothing about the other. The
+  validator caught it, I faceted the chart so identity came from panel titles
+  instead of hue, and the fix reads better for everyone."*
 
 ---
 
@@ -965,6 +998,9 @@ Track pivots — showing you can revise decisions with evidence is a maturity si
 | 2026-08-17 | Backfill the trace *after* subscribing, so no step written during the handshake is lost (decided 2026-07-29) | **Backfill immediately *and* on open** | The original reasoning was right and the placement was wrong. Gating HTTP behind the socket made the stream a precondition for reading a finished run — a blocked WebSocket showed an empty drawer for a trace that was fully available. Merging by `stepNo` means doing both costs nothing and keeps the original guarantee |
 | 2026-08-17 | Status colours are defined once and the light theme overrides what it needs | **Every semantic token is redefined per theme, or it is a bug** | Four were omitted and inherited dark-tuned values onto white at 2.2–2.5:1. A partial override is indistinguishable from a complete one until someone opens the other theme and measures |
 | 2026-08-18 | The messages screen would carry a fixed "deliveries are simulated" disclaimer | **Derive the notice from `delivery_channel`** | A hardcoded disclaimer is true exactly once. `simulated` is already a real value in the row — reading it means the notice disappears by itself the day a real carrier is wired in, instead of waiting for someone to remember it is there |
+| 2026-08-18 | Recharts for the Analytics charts (on the stack list since Phase 0, named in `04-UI-UX` and `05-TECH-STACK`) | **~200 lines of hand-rolled HTML columns** | Measured before deciding: Recharts took the production bundle from 80.4 KB to **193.2 KB gzipped — +112.8 KB for two column charts**. The same argument already turned down socket.io at ~40 KB and TanStack Query at ~13 KB. A library also fights the specific marks these charts need — a surface *gap* rather than a stroke between marks, a cap rounded at the top and square at the baseline |
+| 2026-08-18 | Tasks-per-day as one stacked column, split by outcome | **Three single-series panels, one per outcome** | The status tokens fail colour separation as adjacent series, and the validator said so rather than my eye: resolved↔failed ΔE 5.6 under deuteranopia in dark, and danger↔warning **11.5 under normal vision** in light against a floor of 15. They were contrast-checked as status *text* in the 2026-08-17 pass and are correct for that; carrying a comparison is a different job |
+| 2026-08-18 | The three outcome panels sit side by side | **Stacked full width** | Side by side put each column at 11px, under the ~24px a pointer can hit — measured in the browser, not guessed. Full width puts it at 41px, and sharing an x position turned out to be the better read anyway: whether escalations spiked on the day volume did is now a question you answer by looking straight down |
 
 ---
 
@@ -978,13 +1014,13 @@ Fill these in by launch — concrete numbers make the portfolio post land.
   | Workspace | Tests |
   |---|---|
   | `apps/ai` (pytest) | 299 |
-  | `apps/api` (jest: unit + e2e) | 129 |
+  | `apps/api` (jest: unit + e2e) | 137 |
   | `packages/shared-types` | 47 |
-  | `apps/web` | 51 |
+  | `apps/web` | 65 |
   | `packages/fhir-client` | 27 |
-  | **`pnpm test` total** | **553** |
+  | **`pnpm test` total** | **575** |
   | DB-backed integration, run separately in CI compose (documents 13, escalations 16, messages 12, RLS 13) | 54 |
-  | **Written in total** | **607** |
+  | **Written in total** | **629** |
 
   The number carried here before was **628**, with a breakdown summing to 604 —
   both wrong, in different directions. Two figures are quoted from now on
@@ -995,7 +1031,12 @@ Fill these in by launch — concrete numbers make the portfolio post land.
   `claude-sonnet-5` (3 iterations, 9 trace steps). A measured earlier run cost
   $0.0215 before a tool-description fix removed a wasted round trip — **a 24%
   reduction from one sentence of schema documentation.**
-- [ ] p95 task latency (excl. LLM) — *per-step latency is captured; not yet aggregated*
+- [~] **p95 task latency** — aggregated as of 2026-08-18 and on the Analytics
+  screen: `percentile_cont` over `resolved_at - created_at`, so it is wall clock
+  **including** queue wait and model time. That is not the "excluding LLM"
+  figure this line originally asked for, and the screen says which one it is
+  rather than letting the flattering reading stand. Per-step latency is in
+  `traces.latency_ms` if the LLM-excluded number is ever wanted
 - [~] **# of FHIR resource types integrated** — **5 live**: Patient, Practitioner,
   Schedule, Slot, Appointment (read, write, and version-checked update)
 - [~] **# agents shipped** — **3 of 3 deployed** (Scheduling, Follow-up,
