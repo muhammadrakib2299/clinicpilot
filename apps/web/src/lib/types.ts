@@ -26,3 +26,12 @@ export type TraceKind =
   | "observation"
   | "action"
   | "escalation";
+
+/**
+ * Where one drafted follow-up got to, as `messages.status` stores it.
+ *
+ * `sent` is a claim about this system, not about a patient's phone — the
+ * carrier in this repo is a stand-in, and the row records which one it was.
+ * Anything rendering this must show `deliveryChannel` beside it.
+ */
+export type MessageStatus = "drafted" | "sent" | "failed";

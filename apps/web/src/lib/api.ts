@@ -3,11 +3,12 @@ import type {
   DocumentSummary,
   EscalationStatus,
   EscalationSummary,
+  MessageSummary,
   SessionUser,
   UserRole,
 } from "@clinicpilot/shared-types";
 
-import type { AgentKind, TraceKind } from "@/lib/types";
+import type { AgentKind, MessageStatus, TraceKind } from "@/lib/types";
 import { clearToken, getToken } from "@/lib/session";
 
 const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:8080";
@@ -163,6 +164,7 @@ export type {
   DocumentSummary,
   EscalationStatus,
   EscalationSummary,
+  MessageSummary,
   SessionUser,
   UserRole,
 };
@@ -276,4 +278,22 @@ export async function getOverview() {
  */
 export async function listDocuments() {
   return json<DocumentSummary[]>(await request("/api/documents"));
+}
+
+// ── Outbound patient contact ────────────────────────────────────────────────
+
+/**
+ * Everything the Follow-up Agent drafted, newest first.
+ *
+ * The gateway defaults to 50 and caps nothing else, so the limit is the only
+ * paging this has until `09-TODO`'s pagination item is paid.
+ */
+export async function listMessages(limit?: number) {
+  const query = limit ? `?limit=${limit}` : "";
+  return json<MessageSummary[]>(await request(`/api/messages${query}`));
+}
+
+/** Narrower than `MessageSummary["status"]`, which the gateway types as `string`. */
+export function messageStatusOf(message: MessageSummary): MessageStatus {
+  return message.status === "sent" || message.status === "failed" ? message.status : "drafted";
 }

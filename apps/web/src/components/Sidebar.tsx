@@ -8,6 +8,7 @@ import {
   Inbox,
   LayoutDashboard,
   LifeBuoy,
+  MessageSquare,
   ScrollText,
   Settings,
   Workflow,
@@ -36,7 +37,10 @@ const NAV: Array<{
   { icon: Bot, label: "Agents", to: "/agents" },
   { icon: Inbox, label: "Tasks", to: "/tasks" },
   { icon: LifeBuoy, label: "Human queue", to: "/queue" },
-  // `GET /api/documents` shipped in Phase 3 with no screen at all.
+  // What two of the three agents draw on and produce. Both APIs shipped in
+  // Phase 3 with no screen at all, which made the Follow-up Agent's entire
+  // output invisible inside the product it is part of.
+  { icon: MessageSquare, label: "Patient messages", to: "/messages" },
   { icon: BookText, label: "Knowledge base", to: "/knowledge" },
   { icon: Workflow, label: "Workflows", to: "/workflows" },
   { icon: Database, label: "FHIR Explorer", to: "/fhir" },

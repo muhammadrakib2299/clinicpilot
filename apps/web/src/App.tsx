@@ -8,6 +8,7 @@ import { AuditPage } from "@/pages/AuditPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { KnowledgeBasePage } from "@/pages/KnowledgeBasePage";
 import { LoginPage } from "@/pages/LoginPage";
+import { MessagesPage } from "@/pages/MessagesPage";
 import { NotBuiltPage } from "@/pages/NotBuiltPage";
 import { QueuePage } from "@/pages/QueuePage";
 import { TasksPage } from "@/pages/TasksPage";
@@ -166,6 +167,7 @@ function Shell() {
                 />
               }
             />
+            <Route path="/messages" element={<MessagesPage />} />
             <Route path="/knowledge" element={<KnowledgeBasePage />} />
             <Route path="/audit" element={<AuditPage />} />
             {PLACEHOLDERS.map((page) => (

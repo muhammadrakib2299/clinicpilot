@@ -814,6 +814,113 @@ describe("the human queue", () => {
   });
 });
 
+describe("patient messages", () => {
+  function message(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "aaaaaaaa-1111-4222-8333-444444444444",
+      patientRef: "Patient/1042",
+      templateId: "post_visit_check_in",
+      body: "Hello Ada, a quick check from Northside after your appointment.",
+      status: "drafted",
+      deliveryChannel: null,
+      deliveredAt: null,
+      deliveryError: null,
+      createdAt: "2026-08-12T09:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  async function openMessages(rows: unknown[]) {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, "/api/messages": rows }));
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /patient messages/i }));
+  }
+
+  it("renders what the Follow-up Agent drafted, which used to be invisible", async () => {
+    await openMessages([message()]);
+
+    expect(
+      await screen.findByText("Hello Ada, a quick check from Northside after your appointment."),
+    ).toBeInTheDocument();
+    // The approved template it filled. The agent cannot write in its own
+    // words, and that is only legible if the template is beside the text.
+    expect(screen.getByText("post_visit_check_in")).toBeInTheDocument();
+  });
+
+  it("never shows a delivered status without the channel that took it", async () => {
+    // `sent` is a claim about this system, not about a patient's phone. A tick
+    // with no channel beside it is the lie this screen exists to avoid.
+    await openMessages([
+      message({
+        status: "sent",
+        deliveryChannel: "simulated",
+        deliveredAt: "2026-08-12T09:05:00.000Z",
+      }),
+    ]);
+
+    // Scoped to the row: the summary tile and the stand-in note below the list
+    // both name the same things, and the guarantee under test is that the
+    // *row* never separates them.
+    const row = within(await screen.findByRole("listitem"));
+    expect(row.getByText("sent")).toBeInTheDocument();
+    // Twice within the row — the badge beside the status, and the line saying
+    // when it was handed over. Both are the point.
+    expect(row.getAllByText("simulated").length).toBeGreaterThan(0);
+  });
+
+  it("says nobody received anything, because the channel says it was simulated", async () => {
+    await openMessages([
+      message({ status: "sent", deliveryChannel: "simulated", deliveredAt: "2026-08-12T09:05:00.000Z" }),
+    ]);
+
+    expect(await screen.findByText(/No patient received any of these/i)).toBeInTheDocument();
+  });
+
+  it("drops that note once a real carrier handles the delivery", async () => {
+    // The note is derived from `delivery_channel`, not hardcoded — so wiring a
+    // real carrier in retires it without anyone remembering to.
+    await openMessages([
+      message({ status: "sent", deliveryChannel: "sms", deliveredAt: "2026-08-12T09:05:00.000Z" }),
+    ]);
+
+    await screen.findByText("sent");
+    expect(screen.queryByText(/No patient received any of these/i)).not.toBeInTheDocument();
+  });
+
+  it("shows why a delivery failed, and that nothing will retry it", async () => {
+    await openMessages([
+      message({
+        status: "failed",
+        deliveryChannel: "simulated",
+        deliveryError: "No mobile number on file",
+      }),
+    ]);
+
+    expect(await screen.findByText(/No mobile number on file/)).toBeInTheDocument();
+    expect(screen.getByText(/not be retried automatically/i)).toBeInTheDocument();
+  });
+
+  it("narrows to one status", async () => {
+    await openMessages([
+      message(),
+      message({
+        id: "bbbbbbbb-1111-4222-8333-444444444444",
+        body: "Hello Sam, your results are back and we would like to discuss them.",
+        templateId: "results_ready",
+        status: "sent",
+        deliveryChannel: "simulated",
+        deliveredAt: "2026-08-12T09:05:00.000Z",
+      }),
+    ]);
+
+    await screen.findByText(/Hello Ada/);
+    fireEvent.click(screen.getByRole("button", { name: "Delivered" }));
+
+    expect(screen.getByText(/Hello Sam/)).toBeInTheDocument();
+    expect(screen.queryByText(/Hello Ada/)).not.toBeInTheDocument();
+  });
+});
+
 describe("knowledge base", () => {
   function doc(overrides: Record<string, unknown> = {}) {
     return {
