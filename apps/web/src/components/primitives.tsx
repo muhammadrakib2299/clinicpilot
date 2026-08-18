@@ -33,6 +33,32 @@ export function StatusPill({ status }: { status: AgentStatus }) {
 }
 
 /**
+ * One number, its label, and the smaller figures that qualify it.
+ *
+ * Lived inside `DashboardPage` until the Knowledge Base and Patient Messages
+ * screens wanted the same strip. `hint` is not decoration — a bare count
+ * invites the wrong reading ("6 documents" says nothing about whether they are
+ * retrievable), and the qualifier is where the honest detail goes.
+ */
+export function KpiTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: ReactNode;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-2 font-mono text-2xl font-semibold tnum">{value}</div>
+      {hint && <div className="mt-2 text-xs text-muted">{hint}</div>}
+    </Card>
+  );
+}
+
+/**
  * A loading placeholder shaped like the thing that is coming.
  *
  * Deliberately a pulse rather than the usual sweeping shimmer: a shimmer is a

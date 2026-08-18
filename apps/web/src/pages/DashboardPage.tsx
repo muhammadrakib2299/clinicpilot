@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import {
   Card,
+  KpiTile,
   Meter,
   OutcomeBar,
   RefreshControl,
@@ -18,24 +19,6 @@ import { cn } from "@/lib/cn";
 const pct = (value: number | null) => (value === null ? "—" : `${Math.round(value * 100)}%`);
 const usd = (value: number | null, digits = 4) =>
   value === null ? "—" : `$${value.toFixed(digits)}`;
-
-function KpiTile({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-}) {
-  return (
-    <Card className="p-4">
-      <div className="text-xs text-muted">{label}</div>
-      <div className="mt-2 font-mono text-2xl font-semibold tnum">{value}</div>
-      {hint && <div className="mt-2 text-xs text-muted">{hint}</div>}
-    </Card>
-  );
-}
 
 function Kpis({ kpis }: { kpis: OverviewKpis }) {
   return (
