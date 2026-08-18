@@ -577,6 +577,96 @@ export interface DocumentSummary {
 }
 
 /**
+ * One UTC day in the analytics series.
+ *
+ * Every day in the window gets a row, including the ones with no activity.
+ * Grouping rows by date only ever returns days that *have* rows, and a series
+ * assembled from that silently omits the quiet ones — which draws a week of
+ * three scattered tasks as three adjacent bars and makes an idle system look
+ * busy.
+ */
+export interface AnalyticsDay {
+  /** `YYYY-MM-DD`, bucketed in UTC so the series does not move with server TZ. */
+  date: string;
+  tasks: number;
+  resolved: number;
+  escalated: number;
+  failed: number;
+  costUsd: number;
+}
+
+/** Per-agent totals over the same window. */
+export interface AnalyticsAgent {
+  agentId: string;
+  name: string;
+  kind: string;
+  tasks: number;
+  resolved: number;
+  escalated: number;
+  failed: number;
+  /** Null rather than 0 when nothing has finished — "no data" is not "0%". */
+  successRate: number | null;
+  escalationRate: number | null;
+  costUsd: number;
+  costPerResolved: number | null;
+}
+
+/** Spend split by model, which is where the ADR-003 fallback becomes visible. */
+export interface AnalyticsModel {
+  model: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  costUsd: number;
+}
+
+/**
+ * End-to-end task latency: enqueue to final status.
+ *
+ * Wall clock, so it includes queue wait and model time. That is the number a
+ * person waiting on the answer experiences, and naming it precisely matters
+ * more than making it flattering — `10-LESSONS` asks for p95 "excluding LLM",
+ * which this is not and does not claim to be.
+ */
+export interface AnalyticsLatency {
+  p50Ms: number | null;
+  p95Ms: number | null;
+  /** Finished tasks the percentiles were computed over. */
+  samples: number;
+}
+
+/** What `GET /api/analytics` returns. */
+export interface AnalyticsSummary {
+  /** Length of the window in days, inclusive of today. */
+  days: number;
+  /** First UTC day in the series, `YYYY-MM-DD`. */
+  from: string;
+  daily: AnalyticsDay[];
+  agents: AnalyticsAgent[];
+  models: AnalyticsModel[];
+  latency: AnalyticsLatency;
+  /**
+   * The one business KPI `08-PLAN` asks for that this system actually
+   * measures. "No-show delta" and "calls deflected" are not here because
+   * nothing records appointment attendance or inbound calls, and inventing
+   * them is the mistake the KPI tiles already corrected once.
+   */
+  followUps: { drafted: number; sent: number; failed: number };
+  totals: {
+    tasks: number;
+    resolved: number;
+    escalated: number;
+    failed: number;
+    costUsd: number;
+    costPerResolved: number | null;
+    modelCalls: number;
+    tokensIn: number;
+    tokensOut: number;
+  };
+}
+
+/**
  * What the gateway returns for an appointment.
  *
  * A projection, not the FHIR resource. ADR-008 says the AI service speaks no
