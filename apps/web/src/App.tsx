@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes, useSearchParams } from "react-router-dom"
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { TraceDrawer } from "@/components/TraceDrawer";
+import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { AuditPage } from "@/pages/AuditPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { KnowledgeBasePage } from "@/pages/KnowledgeBasePage";
@@ -39,13 +40,6 @@ const PLACEHOLDERS = [
     phase: "Phase 4",
     description:
       "Browse Patients, Appointments and Slots with a raw resource viewer. The typed FHIR client exists and the agent uses it through the gateway; there is no browsing UI.",
-  },
-  {
-    path: "/analytics",
-    title: "Analytics",
-    phase: "Phase 4",
-    description:
-      "Charts for tasks over time, success vs escalation, and spend per agent. The underlying data is already recorded in traces and llm_usage.",
   },
   {
     path: "/billing",
@@ -167,6 +161,7 @@ function Shell() {
                 />
               }
             />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/messages" element={<MessagesPage />} />
             <Route path="/knowledge" element={<KnowledgeBasePage />} />
             <Route path="/audit" element={<AuditPage />} />

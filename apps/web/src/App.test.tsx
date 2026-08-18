@@ -1003,3 +1003,196 @@ describe("knowledge base", () => {
     expect(screen.getByText(/python -m app.rag.ingest --demo/)).toBeInTheDocument();
   });
 });
+
+describe("analytics", () => {
+  const ANALYTICS = {
+    days: 3,
+    from: "2026-08-16",
+    daily: [
+      { date: "2026-08-16", tasks: 4, resolved: 3, escalated: 1, failed: 0, costUsd: 0.0412 },
+      // A deliberately quiet day in the middle. The zero-fill is the point:
+      // grouping rows by date would drop this and draw the 16th next to the
+      // 18th, making an idle system look continuously busy.
+      { date: "2026-08-17", tasks: 0, resolved: 0, escalated: 0, failed: 0, costUsd: 0 },
+      { date: "2026-08-18", tasks: 5, resolved: 4, escalated: 0, failed: 1, costUsd: 0.0533 },
+    ],
+    agents: [
+      {
+        agentId: "agent-1",
+        name: "Scheduling Agent",
+        kind: "scheduling",
+        tasks: 9,
+        resolved: 7,
+        escalated: 1,
+        failed: 1,
+        successRate: 7 / 9,
+        escalationRate: 1 / 9,
+        costUsd: 0.0945,
+        costPerResolved: 0.0135,
+      },
+      {
+        agentId: "agent-2",
+        name: "Document Q&A Agent",
+        kind: "docqa",
+        tasks: 0,
+        resolved: 0,
+        escalated: 0,
+        failed: 0,
+        successRate: null,
+        escalationRate: null,
+        costUsd: 0,
+        costPerResolved: null,
+      },
+    ],
+    models: [
+      {
+        model: "claude-sonnet-5",
+        calls: 10,
+        tokensIn: 19000,
+        tokensOut: 3000,
+        cacheReadTokens: 4200,
+        costUsd: 0.0891,
+      },
+      {
+        model: "claude-haiku-4-5-20251001",
+        calls: 2,
+        tokensIn: 2000,
+        tokensOut: 400,
+        cacheReadTokens: 0,
+        costUsd: 0.0054,
+      },
+    ],
+    latency: { p50Ms: 8200, p95Ms: 15400, samples: 7 },
+    followUps: { drafted: 2, sent: 5, failed: 1 },
+    totals: {
+      tasks: 9,
+      resolved: 7,
+      escalated: 1,
+      failed: 1,
+      costUsd: 0.0945,
+      costPerResolved: 0.0135,
+      modelCalls: 12,
+      tokensIn: 21000,
+      tokensOut: 3400,
+    },
+  };
+
+  async function openAnalytics(overrides: Record<string, unknown> = {}) {
+    const fetchMock = mockFetch({ ...BASE_HANDLERS, "/api/analytics": { ...ANALYTICS, ...overrides } });
+    vi.stubGlobal("fetch", fetchMock);
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /analytics/i }));
+    return fetchMock;
+  }
+
+  it("replaces the not-built placeholder with real figures", async () => {
+    await openAnalytics();
+
+    expect(await screen.findByRole("heading", { name: "Analytics" })).toBeInTheDocument();
+    expect(screen.queryByText(/not built yet/i)).not.toBeInTheDocument();
+    // p95 rendered as a duration rather than 15400.
+    expect(screen.getByText("15.4s")).toBeInTheDocument();
+  });
+
+  it("draws one titled panel per outcome instead of one stacked column", async () => {
+    // The status tokens fail colour separation as adjacent series — worst pair
+    // 11.5 under *normal* vision in light. Faceting is what keeps identity out
+    // of colour, so the titles existing is the guarantee under test.
+    await openAnalytics();
+
+    await screen.findByRole("heading", { name: "Tasks per day" });
+    expect(screen.getByRole("figure", { name: /Resolved/ })).toBeInTheDocument();
+    expect(screen.getByRole("figure", { name: /Escalated/ })).toBeInTheDocument();
+    expect(screen.getByRole("figure", { name: /Failed/ })).toBeInTheDocument();
+  });
+
+  it("draws every day in the window, including the ones with nothing in them", async () => {
+    await openAnalytics();
+
+    const resolved = within(await screen.findByRole("figure", { name: /Resolved/ }));
+    const columns = resolved.getAllByRole("button");
+
+    // Three columns for three days, oldest first. The quiet day is present and
+    // says zero — not absent, which would close the gap silently and misdate
+    // every column after it. Matched on the day number rather than the whole
+    // label, because the month's position moves with the reader's locale.
+    expect(columns).toHaveLength(3);
+    expect(columns.map((column) => column.textContent)).toEqual([
+      expect.stringMatching(/16.*: 3$/),
+      expect.stringMatching(/17.*: 0$/),
+      expect.stringMatching(/18.*: 4$/),
+    ]);
+  });
+
+  it("reaches every plotted value without a pointer", async () => {
+    // A tooltip may enhance a chart; it may not be the only way to read it.
+    await openAnalytics();
+
+    fireEvent.click(await screen.findByRole("button", { name: /The same numbers as a table/ }));
+
+    const table = within(screen.getByRole("table", { name: /Tasks and model spend/ }));
+    expect(table.getByText("2026-08-17")).toBeInTheDocument();
+    expect(table.getByText("$0.0533")).toBeInTheDocument();
+  });
+
+  it("keeps an agent that did nothing, so idle and missing do not look alike", async () => {
+    await openAnalytics();
+
+    expect(await screen.findByText("Document Q&A Agent")).toBeInTheDocument();
+  });
+
+  it("shows the second model, which is the fallback having fired", async () => {
+    await openAnalytics();
+
+    expect(await screen.findByText("claude-haiku-4-5-20251001")).toBeInTheDocument();
+  });
+
+  it("puts the window in the URL and refetches against it", async () => {
+    const fetchMock = await openAnalytics();
+    await screen.findByRole("heading", { name: "Analytics" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Last 7 days" }));
+
+    await waitFor(() =>
+      expect(
+        (fetchMock.mock.calls as unknown as [string][]).some(([url]) =>
+          url.includes("/api/analytics?days=7"),
+        ),
+      ).toBe(true),
+    );
+    expect(window.location.search).toContain("days=7");
+  });
+
+  it("says what it cannot measure rather than inventing it", async () => {
+    // The KPI tiles carried "no-show −4pp" and "76% calls deflected" from the
+    // design mock once. Nothing measures either, and the absence is stated.
+    await openAnalytics();
+
+    expect(
+      await screen.findByText(/No-show delta and calls deflected are not\s+here/),
+    ).toBeInTheDocument();
+  });
+
+  it("refuses to draw flat panels for a window with nothing in it", async () => {
+    await openAnalytics({
+      daily: [{ date: "2026-08-18", tasks: 0, resolved: 0, escalated: 0, failed: 0, costUsd: 0 }],
+      agents: [],
+      models: [],
+      latency: { p50Ms: null, p95Ms: null, samples: 0 },
+      totals: {
+        tasks: 0,
+        resolved: 0,
+        escalated: 0,
+        failed: 0,
+        costUsd: 0,
+        costPerResolved: null,
+        modelCalls: 0,
+        tokensIn: 0,
+        tokensOut: 0,
+      },
+    });
+
+    expect(await screen.findByText("Nothing ran in this window")).toBeInTheDocument();
+    expect(screen.queryByRole("figure", { name: /Resolved/ })).not.toBeInTheDocument();
+  });
+});
