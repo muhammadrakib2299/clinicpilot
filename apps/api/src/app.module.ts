@@ -2,6 +2,7 @@ import { Module, type MiddlewareConsumer, type NestModule } from "@nestjs/common
 import { ConfigModule } from "@nestjs/config";
 
 import { AgentsModule } from "./agents/agents.module";
+import { AnalyticsModule } from "./analytics/analytics.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { RequestContextMiddleware } from "./common/request-context";
@@ -25,7 +26,7 @@ import { TenantsModule } from "./tenants/tenants.module";
  * closed by default, and forgetting a decorator locks a route down rather than
  * opening it up.
  *
- * Remaining modules (orchestrator, workflows, analytics, billing) arrive in
+ * Remaining modules (orchestrator, workflows, billing) arrive in
  * Phases 2.5–4 per 08-PLAN.md.
  */
 @Module({
@@ -40,6 +41,7 @@ import { TenantsModule } from "./tenants/tenants.module";
     TasksModule,
     AgentsModule,
     OverviewModule,
+    AnalyticsModule,
     FhirModule,
     MessagesModule,
     DocumentsModule,
