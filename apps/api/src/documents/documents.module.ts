@@ -28,7 +28,7 @@ export class DocumentsController {
  * Ingest and retrieval, for the AI service.
  *
  * Behind the service token like every other `internal/` route. Search is a
- * POST despite reading nothing, because the query is a 384-element vector:
+ * POST despite reading nothing, because the query is a 1024-element vector:
  * as a query string it would be several kilobytes of URL, and it would end up
  * in every access log the request passes through.
  */
