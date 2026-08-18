@@ -6,6 +6,7 @@ import { Topbar } from "@/components/Topbar";
 import { TraceDrawer } from "@/components/TraceDrawer";
 import { AuditPage } from "@/pages/AuditPage";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { KnowledgeBasePage } from "@/pages/KnowledgeBasePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NotBuiltPage } from "@/pages/NotBuiltPage";
 import { QueuePage } from "@/pages/QueuePage";
@@ -165,6 +166,7 @@ function Shell() {
                 />
               }
             />
+            <Route path="/knowledge" element={<KnowledgeBasePage />} />
             <Route path="/audit" element={<AuditPage />} />
             {PLACEHOLDERS.map((page) => (
               <Route

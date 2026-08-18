@@ -1,5 +1,6 @@
 import type {
   AuditQueryInput,
+  DocumentSummary,
   EscalationStatus,
   EscalationSummary,
   SessionUser,
@@ -158,7 +159,13 @@ export async function downloadAuditCsv(filters: AuditQueryInput = {}): Promise<v
   URL.revokeObjectURL(url);
 }
 
-export type { EscalationStatus, EscalationSummary, SessionUser, UserRole };
+export type {
+  DocumentSummary,
+  EscalationStatus,
+  EscalationSummary,
+  SessionUser,
+  UserRole,
+};
 
 export async function createTask(input: string, agentKind: AgentKind = "scheduling") {
   return json<Task>(
@@ -257,4 +264,16 @@ export async function getOverview() {
   return json<{ kpis: OverviewKpis; activity: ActivityItem[] }>(
     await request("/api/overview"),
   );
+}
+
+// ── The corpus ──────────────────────────────────────────────────────────────
+
+/**
+ * What the Document Q&A agent can answer from.
+ *
+ * Not role-gated, matching the gateway: these are the practice's own policies,
+ * and RLS is what keeps one clinic's corpus out of another's.
+ */
+export async function listDocuments() {
+  return json<DocumentSummary[]>(await request("/api/documents"));
 }

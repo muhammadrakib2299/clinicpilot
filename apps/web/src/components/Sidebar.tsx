@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Bot,
+  BookText,
   CreditCard,
   Database,
   Inbox,
@@ -35,6 +36,8 @@ const NAV: Array<{
   { icon: Bot, label: "Agents", to: "/agents" },
   { icon: Inbox, label: "Tasks", to: "/tasks" },
   { icon: LifeBuoy, label: "Human queue", to: "/queue" },
+  // `GET /api/documents` shipped in Phase 3 with no screen at all.
+  { icon: BookText, label: "Knowledge base", to: "/knowledge" },
   { icon: Workflow, label: "Workflows", to: "/workflows" },
   { icon: Database, label: "FHIR Explorer", to: "/fhir" },
   { icon: BarChart3, label: "Analytics", to: "/analytics" },

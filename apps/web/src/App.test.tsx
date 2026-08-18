@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -811,5 +811,88 @@ describe("the human queue", () => {
     await waitFor(() =>
       expect(screen.getByText(/every escalation has been picked up/i)).toBeInTheDocument(),
     );
+  });
+});
+
+describe("knowledge base", () => {
+  function doc(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "cccccccc-1111-4222-8333-444444444444",
+      slug: "appointments",
+      title: "Booking and cancelling appointments",
+      source: "shared/appointments.md",
+      chunkCount: 9,
+      embeddingModel: "hashing-v1-1024",
+      updatedAt: "2026-08-12T08:00:00.000Z",
+      ...overrides,
+    };
+  }
+
+  async function openKnowledge(rows: unknown[]) {
+    vi.stubGlobal("fetch", mockFetch({ ...BASE_HANDLERS, "/api/documents": rows }));
+    await renderSignedIn();
+    fireEvent.click(screen.getByRole("link", { name: /knowledge base/i }));
+  }
+
+  it("answers what the Document Q&A agent can cite, and totals the passages", async () => {
+    await openKnowledge([
+      doc(),
+      doc({
+        id: "dddddddd-1111-4222-8333-444444444444",
+        slug: "opening-hours",
+        title: "Opening hours",
+        source: "northside/opening-hours.md",
+        chunkCount: 4,
+      }),
+    ]);
+
+    expect(await screen.findByText("Booking and cancelling appointments")).toBeInTheDocument();
+    expect(screen.getByText("Opening hours")).toBeInTheDocument();
+    // Passages, not documents — retrieval searches chunks and a citation
+    // points at one.
+    expect(screen.getByText("13")).toBeInTheDocument();
+  });
+
+  it("calls out a document with no passages, because the agent cannot reach it", async () => {
+    await openKnowledge([doc({ chunkCount: 0, embeddingModel: null })]);
+
+    const table = within(await screen.findByRole("table"));
+    expect(table.getByText(/not retrievable/)).toBeInTheDocument();
+  });
+
+  it("names the embedder's limit rather than leaving it in an ADR", async () => {
+    await openKnowledge([doc()]);
+
+    const table = within(await screen.findByRole("table"));
+    expect(table.getByText("hashing-v1-1024")).toBeInTheDocument();
+    expect(screen.getByText(/lexically/)).toBeInTheDocument();
+  });
+
+  it("narrows by title and by source file", async () => {
+    await openKnowledge([
+      doc(),
+      doc({
+        id: "dddddddd-1111-4222-8333-444444444444",
+        slug: "opening-hours",
+        title: "Opening hours",
+        source: "northside/opening-hours.md",
+        chunkCount: 4,
+      }),
+    ]);
+
+    await screen.findByText("Opening hours");
+    fireEvent.change(screen.getByLabelText("Search documents by title, slug or source"), {
+      target: { value: "northside" },
+    });
+
+    expect(screen.getByText("Opening hours")).toBeInTheDocument();
+    expect(screen.queryByText("Booking and cancelling appointments")).not.toBeInTheDocument();
+  });
+
+  it("points an empty corpus at the ingest command", async () => {
+    await openKnowledge([]);
+
+    expect(await screen.findByText(/This clinic has no documents yet/)).toBeInTheDocument();
+    expect(screen.getByText(/python -m app.rag.ingest --demo/)).toBeInTheDocument();
   });
 });
