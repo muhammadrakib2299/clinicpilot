@@ -1,4 +1,5 @@
 import type {
+  AnalyticsSummary,
   AuditQueryInput,
   DocumentSummary,
   EscalationStatus,
@@ -161,6 +162,7 @@ export async function downloadAuditCsv(filters: AuditQueryInput = {}): Promise<v
 }
 
 export type {
+  AnalyticsSummary,
   DocumentSummary,
   EscalationStatus,
   EscalationSummary,
@@ -296,4 +298,17 @@ export async function listMessages(limit?: number) {
 /** Narrower than `MessageSummary["status"]`, which the gateway types as `string`. */
 export function messageStatusOf(message: MessageSummary): MessageStatus {
   return message.status === "sent" || message.status === "failed" ? message.status : "drafted";
+}
+
+// ── Analytics ───────────────────────────────────────────────────────────────
+
+/**
+ * Every panel on the Analytics screen, over one window.
+ *
+ * One call rather than one per panel, because they are all scoped by the same
+ * `days`: separate requests would let the tiles and the charts drift onto
+ * different windows the moment one of them refetched on its own.
+ */
+export async function getAnalytics(days: number) {
+  return json<AnalyticsSummary>(await request(`/api/analytics?days=${days}`));
 }
