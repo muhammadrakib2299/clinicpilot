@@ -1,7 +1,7 @@
 """
 ClinicPilot AI service (FastAPI).
 
-Responsibilities (built out in Phases 1–3, see ../../08-PLAN.md):
+Responsibilities (built out in Phases 1–3, see ../../docs/project/08-PLAN.md):
   - Claude tool-use loop (reason -> tool -> observe -> act)   [Phase 1]
   - RAG over pgvector for the Document Q&A agent
   - PHI redaction / de-identification before any LLM call

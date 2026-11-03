@@ -279,7 +279,7 @@ Tagged by confidence to fill in as you self-assess: ⬜ new · 🟨 some · 🟩
   embeddings API, so the decision was an `Embedder` Protocol with one honest
   local implementation (feature hashing) rather than a Voyage client nobody
   could execute — the same argument ADR-003 made about OpenAI. Written up as
-  [ADR-009](./docs/adr/ADR-009-lexical-embeddings-behind-an-interface.md).
+  [ADR-009](../adr/ADR-009-lexical-embeddings-behind-an-interface.md).
 - **Problems / what surprised me:**
   - **I sized the vector like a model, not like a hash table.** 384 dimensions,
     because that is what `all-MiniLM-L6-v2` produces and the number felt

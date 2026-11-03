@@ -22,7 +22,7 @@ within a few days. There is no bounty; this is a personal project.
 
 ## Known gaps
 
-These are real and deliberate, tracked in [`09-TODO.md`](./09-TODO.md). Listing
+These are real and deliberate, tracked in [`09-TODO.md`](./docs/project/09-TODO.md). Listing
 them is the point: a security file that claims no weaknesses is less useful than
 one that names them.
 

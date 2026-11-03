@@ -239,17 +239,17 @@ pnpm down          # stop the stack
 | # | Doc | What's inside |
 |---|-----|---------------|
 | — | [`README.md`](./README.md) | You are here |
-| 01 | [`01-PROJECT-OVERVIEW.md`](./01-PROJECT-OVERVIEW.md) | Problem, users, elevator pitch, end-to-end demo flow |
-| 02 | [`02-PURPOSE-GOALS-IMPACT.md`](./02-PURPOSE-GOALS-IMPACT.md) | Purpose, SMART goals, impact, and how it lands jobs |
-| 03 | [`03-FEATURES.md`](./03-FEATURES.md) | MVP vs stretch features + researched suggestions |
-| 04 | [`04-UI-UX.md`](./04-UI-UX.md) | Screens, IA, design system, accessibility, wireframe |
-| 05 | [`05-TECH-STACK.md`](./05-TECH-STACK.md) | Finalized stack + rationale + alternatives |
-| 06 | [`06-ARCHITECTURE-SCALABILITY.md`](./06-ARCHITECTURE-SCALABILITY.md) | Architecture, folder tree, data model, multi-tenancy, scaling |
-| 07 | [`07-MARKET-RESEARCH.md`](./07-MARKET-RESEARCH.md) | Market demand, competitors, roles, rates, sources |
-| 08 | [`08-PLAN.md`](./08-PLAN.md) | Phased roadmap, vertical-slice-first |
-| 09 | [`09-TODO.md`](./09-TODO.md) | Granular execution checklist |
-| 10 | [`10-LESSONS.md`](./10-LESSONS.md) | Skills to learn + lessons-learned log |
-| 11 | [`11-SAAS-PRODUCTIZATION.md`](./11-SAAS-PRODUCTIZATION.md) | Commercial SaaS layer: plans, billing, quotas, metering, scale |
+| 01 | [`01-PROJECT-OVERVIEW.md`](./docs/project/01-PROJECT-OVERVIEW.md) | Problem, users, elevator pitch, end-to-end demo flow |
+| 02 | [`02-PURPOSE-GOALS-IMPACT.md`](./docs/project/02-PURPOSE-GOALS-IMPACT.md) | Purpose, SMART goals, impact, and how it lands jobs |
+| 03 | [`03-FEATURES.md`](./docs/project/03-FEATURES.md) | MVP vs stretch features + researched suggestions |
+| 04 | [`04-UI-UX.md`](./docs/project/04-UI-UX.md) | Screens, IA, design system, accessibility, wireframe |
+| 05 | [`05-TECH-STACK.md`](./docs/project/05-TECH-STACK.md) | Finalized stack + rationale + alternatives |
+| 06 | [`06-ARCHITECTURE-SCALABILITY.md`](./docs/project/06-ARCHITECTURE-SCALABILITY.md) | Architecture, folder tree, data model, multi-tenancy, scaling |
+| 07 | [`07-MARKET-RESEARCH.md`](./docs/project/07-MARKET-RESEARCH.md) | Market demand, competitors, roles, rates, sources |
+| 08 | [`08-PLAN.md`](./docs/project/08-PLAN.md) | Phased roadmap, vertical-slice-first |
+| 09 | [`09-TODO.md`](./docs/project/09-TODO.md) | Granular execution checklist |
+| 10 | [`10-LESSONS.md`](./docs/project/10-LESSONS.md) | Skills to learn + lessons-learned log |
+| 11 | [`11-SAAS-PRODUCTIZATION.md`](./docs/project/11-SAAS-PRODUCTIZATION.md) | Commercial SaaS layer: plans, billing, quotas, metering, scale |
 | — | [`docs/adr/`](./docs/adr/) | Architecture Decision Records (001, 002, 004, 007, 008 accepted) |
 | — | [`docs/diagrams/`](./docs/diagrams/architecture.md) | Request path, task lifecycle, deployment topology (mermaid) |
 | — | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Setup, the verify commands, commit and ADR conventions |
@@ -343,14 +343,14 @@ implies a text somebody received) · an inbound n8n webhook so a clinic's own
 automations can create tasks · an eval harness with a committed report ·
 OpenTelemetry and a metrics exporter · Stripe and quotas · deployment.
 
-Known sharp edges, all tracked in [`09-TODO.md`](./09-TODO.md) and
+Known sharp edges, all tracked in [`09-TODO.md`](./docs/project/09-TODO.md) and
 [`SECURITY.md`](./SECURITY.md): the enqueue sits just outside the task's
 transaction, so a Redis outage in that window leaves a task needing a manual
 nudge; and the JWT lives in `localStorage` rather than an httpOnly cookie, which
 is a real XSS exposure and is Phase 5 work alongside TLS.
 
-See [`09-TODO.md`](./09-TODO.md) for the live checklist and
-[`10-LESSONS.md`](./10-LESSONS.md) for what broke along the way.
+See [`09-TODO.md`](./docs/project/09-TODO.md) for the live checklist and
+[`10-LESSONS.md`](./docs/project/10-LESSONS.md) for what broke along the way.
 
 ---
 
@@ -375,7 +375,7 @@ up with the measurement.
 **Planned:** an inbound n8n webhook · OpenAI fallback behind the provider
 interface · OpenTelemetry + Prometheus · Vercel + Fly.io deployment.
 
-Full rationale in [`05-TECH-STACK.md`](./05-TECH-STACK.md).
+Full rationale in [`05-TECH-STACK.md`](./docs/project/05-TECH-STACK.md).
 
 ---
 
