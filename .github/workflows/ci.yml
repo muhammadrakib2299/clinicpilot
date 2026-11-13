@@ -81,21 +81,34 @@ jobs:
 
       # Compose resolves its env file relative to the compose file, so the
       # scripts pass `--env-file .env` and that file has to exist.
+      #
+      # The gateway container runs NODE_ENV=production, where it refuses to boot
+      # on the placeholders in .env.example. That refusal is the point, so CI
+      # does not get around it: it generates real values for this run. Hex,
+      # because base64's `/` and `+` are not safe inside a URL password. They
+      # exist only on this runner and are masked in the log.
       - name: Configure
-        run: cp .env.example .env
+        run: |
+          set -euo pipefail
+          jwt_secret="$(openssl rand -hex 32)"
+          service_token="$(openssl rand -hex 32)"
+          app_password="$(openssl rand -hex 24)"
+          for value in "$jwt_secret" "$service_token" "$app_password"; do
+            echo "::add-mask::$value"
+          done
+
+          grep -vE '^(JWT_SECRET|SERVICE_TOKEN|APP_DATABASE_URL|APP_DATABASE_URL_COMPOSE)=' \
+            .env.example > .env
+          {
+            echo "JWT_SECRET=$jwt_secret"
+            echo "SERVICE_TOKEN=$service_token"
+            echo "APP_DATABASE_URL=postgresql://clinicpilot_app:$app_password@localhost:5432/clinicpilot"
+            echo "APP_DATABASE_URL_COMPOSE=postgresql://clinicpilot_app:$app_password@postgres:5432/clinicpilot"
+          } >> .env
 
       # This is Phase 0's exit gate, asserted rather than claimed.
       - name: Build and start the whole stack
         run: docker compose -f infra/docker-compose.yml --env-file .env up -d --build --wait
-
-      - name: Probe the health endpoints
-        run: |
-          set -euo pipefail
-          curl -fsS http://localhost:8080/api/health | grep -q '"status":"ok"'
-          curl -fsS http://localhost:8000/health     | grep -q '"status":"ok"'
-          curl -fsS -o /dev/null http://localhost:8081/
-          # SPA fallback: an unknown client route must serve the shell, not 404.
-          curl -fsS -o /dev/null http://localhost:8081/agents/deep/route
 
       - name: Verify pgvector is installed
         run: |
@@ -116,6 +129,18 @@ jobs:
           pnpm db:migrate
           pnpm db:rls
           pnpm db:seed
+
+      # After db:rls, not before. /api/health says "ok" only once the gateway is
+      # connected as a role that RLS applies to, and db:rls is what creates that
+      # role — until then the gateway is up and rightly reports "degraded".
+      - name: Probe the health endpoints
+        run: |
+          set -euo pipefail
+          curl -fsS http://localhost:8080/api/health | grep -q '"status":"ok"'
+          curl -fsS http://localhost:8000/health     | grep -q '"status":"ok"'
+          curl -fsS -o /dev/null http://localhost:8081/
+          # SPA fallback: an unknown client route must serve the shell, not 404.
+          curl -fsS -o /dev/null http://localhost:8081/agents/deep/route
 
       # The Phase 2 gate, asserted rather than claimed — the same shape as the
       # compose smoke test above. Tenant isolation has no symptom when it is
