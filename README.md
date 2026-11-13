@@ -2,9 +2,12 @@
 
 > **One-line pitch:** ClinicPilot is a multi-tenant SaaS control plane that lets healthcare clinics deploy, orchestrate, and monitor a fleet of AI agents (scheduling, patient follow-up, document Q&A) built on n8n workflows and the Claude API — with FHIR/EHR integration, role-based access, and a HIPAA-minded audit trail baked in.
 
+<!-- Test count = what CI ran on 2026-11-13: 276 Node unit + 74 integration
+     (Stack job) + 299 Python. Re-count from a green run before changing it. -->
+
 [![CI](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammadrakib2299/clinicpilot/actions/workflows/ci.yml)
 ![status](https://img.shields.io/badge/status-Phase_4_in_progress-blue)
-![tests](https://img.shields.io/badge/tests-629_passing-brightgreen)
+![tests](https://img.shields.io/badge/tests-649_passing-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![frontend](https://img.shields.io/badge/frontend-React_18_+_TypeScript-61DAFB)
 ![api](https://img.shields.io/badge/api-Node_(NestJS)_+_Python_FastAPI-3776AB)
@@ -225,7 +228,7 @@ Without the worker, tasks are created and enqueued but nothing consumes them.
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # 276 tests, 5 workspaces
-pnpm test:integration                                    # 54, needs a live database
+pnpm test:integration                                    # 74, needs a live database
 cd apps/ai && pytest && ruff check .                     # 299 tests
 ```
 
