@@ -85,6 +85,11 @@ pnpm install
 Then open `.env` and set **`ANTHROPIC_API_KEY`** — the agent demo makes real
 Claude calls. Everything else works without it.
 
+Also replace **`JWT_SECRET`** and **`SERVICE_TOKEN`** with real values
+(`openssl rand -hex 32` for each). The containerised gateway runs with
+`NODE_ENV=production`, and refuses to boot on the placeholders that
+`.env.example` ships.
+
 > **Port already in use?** Every host port is overridable in `.env`
 > (`POSTGRES_PORT`, `REDIS_PORT`, `WEB_PORT`, `API_PORT`, `N8N_PORT`). A machine
 > with its own Postgres on 5432 or Redis on 6379 is common — set

@@ -102,6 +102,16 @@ services:
       # Both the containerised web (8081) and a host Vite dev server (5173).
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8081,http://localhost:5173}
       DATABASE_URL: postgresql://${POSTGRES_USER:-clinicpilot}:${POSTGRES_PASSWORD:-clinicpilot}@postgres:5432/${POSTGRES_DB:-clinicpilot}
+      # The unprivileged role `pnpm db:rls` creates. The owner above is a
+      # superuser and bypasses RLS, so the gateway must never serve requests as
+      # it. This is APP_DATABASE_URL as the compose network sees it — the
+      # database is `postgres` here, and localhost is this container.
+      APP_DATABASE_URL: ${APP_DATABASE_URL_COMPOSE:-}
+      # No defaults, on purpose. NODE_ENV=production makes the gateway refuse to
+      # boot on a missing value or an .env.example placeholder
+      # (assertProductionSecrets); a fallback here would only hide which.
+      JWT_SECRET: ${JWT_SECRET:-}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
       REDIS_URL: redis://redis:6379
       AI_SERVICE_URL: http://ai:8000
       N8N_BASE_URL: http://n8n:5678
