@@ -20,6 +20,10 @@
     "db:migrate": {
       "cache": false
     },
+    "db:rls": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "db:seed": {
       "dependsOn": ["^build"],
       "cache": false

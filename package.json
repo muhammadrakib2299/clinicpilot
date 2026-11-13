@@ -19,7 +19,7 @@
     "worker": "pnpm --filter @clinicpilot/api worker:dev",
     "db:generate": "turbo run db:generate",
     "db:migrate": "turbo run db:migrate",
-    "db:rls": "pnpm --filter @clinicpilot/api db:rls",
+    "db:rls": "turbo run db:rls",
     "db:seed": "turbo run db:seed",
     "db:studio": "pnpm --filter @clinicpilot/api db:studio",
     "fhir:seed": "turbo run fhir:seed",
