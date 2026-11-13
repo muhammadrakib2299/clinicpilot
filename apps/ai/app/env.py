@@ -28,16 +28,25 @@ from dotenv import load_dotenv
 WORKSPACE_MARKER = "pnpm-workspace.yaml"
 
 
-def find_root_env(start: Path | None = None) -> Path | None:
-    """The repo root's `.env`, or None when there is no repo above us."""
+def find_repo_root(start: Path | None = None) -> Path | None:
+    """The directory holding the workspace marker, or None outside the repo."""
     here = (start or Path(__file__)).resolve()
 
     for directory in here.parents:
         if (directory / WORKSPACE_MARKER).is_file():
-            candidate = directory / ".env"
-            return candidate if candidate.is_file() else None
+            return directory
 
     return None
+
+
+def find_root_env(start: Path | None = None) -> Path | None:
+    """The repo root's `.env`, or None when there is no repo above us."""
+    root = find_repo_root(start)
+    if root is None:
+        return None
+
+    candidate = root / ".env"
+    return candidate if candidate.is_file() else None
 
 
 def load_root_env() -> bool:
