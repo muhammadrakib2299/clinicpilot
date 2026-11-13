@@ -50,11 +50,15 @@ class TestFindRootEnv:
         assert env.find_root_env(module) is None
 
     def test_resolves_against_the_real_repo_when_given_no_argument(self) -> None:
-        found = env.find_root_env()
+        # Asserts the marker walk, not the `.env` beside it. That file is
+        # gitignored, so a fresh checkout has none and `find_root_env()` is
+        # rightly None there: asserting on it passed on a machine with a `.env`
+        # and failed in CI, which has none.
+        root = env.find_repo_root()
 
         # This test run *is* inside the repo, so the marker is findable.
-        assert found is not None
-        assert (found.parent / env.WORKSPACE_MARKER).is_file()
+        assert root == Path(__file__).resolve().parents[3]
+        assert (root / env.WORKSPACE_MARKER).is_file()
 
 
 class TestLoadRootEnv:
